@@ -10,4 +10,6 @@ dependencies = [
     "psycopg[binary]",
     "pgvector",
     "requests",
+    "alembic",
+    "python-dotenv",
 ]
