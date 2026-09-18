@@ -1,0 +1,10 @@
+[project]
+name = "inspire-jobs-worker"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic-settings",
+    "sqlalchemy",
+    "psycopg[binary]",
+    "httpx",
+]
