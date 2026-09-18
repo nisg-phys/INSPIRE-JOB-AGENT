@@ -18,11 +18,16 @@ class SearchRequest(BaseModel):
     query: str
 
 
-@app.post("/jobs/search", response_model=list[FormattedJob])
-def search(request: SearchRequest) -> list[FormattedJob]:
+class SearchResponse(BaseModel):
+    cached: bool
+    results: list[FormattedJob]
+
+
+@app.post("/jobs/search", response_model=SearchResponse)
+def search(request: SearchRequest) -> SearchResponse:
     cached = cache.lookup(request.query)
     if cached is not None:
-        return cached.result
+        return SearchResponse(cached=True, results=cached.result)
 
     try:
         params = rewrite_query(request.query)
@@ -36,7 +41,7 @@ def search(request: SearchRequest) -> list[FormattedJob]:
 
     result = format_jobs(jobs)
     cache.store(request.query, params, result)
-    return result
+    return SearchResponse(cached=False, results=result)
 
 
 def main() -> None:
