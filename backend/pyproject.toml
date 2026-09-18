@@ -13,3 +13,6 @@ dependencies = [
     "alembic",
     "python-dotenv",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
