@@ -1,7 +1,10 @@
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 from app.config import get_settings
-from app.inspire_client import InspireAPIError, JobQueryParams, RawJob, search_jobs
+from app.formatter import FormattedJob, format_jobs
+from app.inspire_client import InspireAPIError, search_jobs
+from app.query_rewriter import QueryRewriteError, rewrite_query
 
 # Fail loudly at import time (i.e. before uvicorn starts serving) if required
 # config is missing, rather than failing on the first request.
@@ -10,12 +13,23 @@ get_settings()
 app = FastAPI(title="Inspire Jobs Agent")
 
 
-@app.post("/jobs/search", response_model=list[RawJob])
-def search(params: JobQueryParams) -> list[RawJob]:
+class SearchRequest(BaseModel):
+    query: str
+
+
+@app.post("/jobs/search", response_model=list[FormattedJob])
+def search(request: SearchRequest) -> list[FormattedJob]:
     try:
-        return search_jobs(params)
+        params = rewrite_query(request.query)
+    except QueryRewriteError as exc:
+        raise HTTPException(status_code=502, detail=f"Query rewriting failed: {exc}") from exc
+
+    try:
+        jobs = search_jobs(params)
     except InspireAPIError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=f"Inspire search failed: {exc}") from exc
+
+    return format_jobs(jobs)
 
 
 def main() -> None:
