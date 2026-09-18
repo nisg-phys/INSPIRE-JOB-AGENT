@@ -12,6 +12,7 @@ dependencies = [
     "requests",
     "alembic",
     "python-dotenv",
+    "groq",
 ]
 
 [tool.setuptools.packages.find]

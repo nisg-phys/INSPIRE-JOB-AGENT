@@ -13,9 +13,8 @@ class Settings(BaseSettings):
     )
 
     database_url: str
-    llm_provider_primary_api_key: str
+    groq_api_key: str
     embedding_model: str
-    llm_provider_secondary_api_key: str | None = None
 
 
 @lru_cache
