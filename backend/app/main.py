@@ -5,6 +5,7 @@ from app import cache
 from app.config import get_settings
 from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
+from app.jobs_log import log_jobs
 from app.query_rewriter import QueryRewriteError, rewrite_query
 
 # Fail loudly at import time (i.e. before uvicorn starts serving) if required
@@ -39,6 +40,7 @@ def search(request: SearchRequest) -> SearchResponse:
     except InspireAPIError as exc:
         raise HTTPException(status_code=502, detail=f"Inspire search failed: {exc}") from exc
 
+    log_jobs(jobs)
     result = format_jobs(jobs)
     cache.store(request.query, params, result)
     return SearchResponse(cached=False, results=result)

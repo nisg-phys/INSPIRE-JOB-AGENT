@@ -1,16 +1,20 @@
 import sys
 
 from worker.config import get_settings
+from worker.discovery import discover_institutions
 from worker.enrichment import enrich
 
 
 def main() -> None:
     get_settings()
 
-    institutions = sys.argv[1:]
+    # Explicit institutions on the command line still work (useful for
+    # manual testing/backfills); with none given, discover automatically
+    # from institutions seen in jobs_raw.
+    institutions = sys.argv[1:] or discover_institutions()
     if not institutions:
-        print("usage: python -m worker.main <institution> [<institution> ...]", file=sys.stderr)
-        sys.exit(1)
+        print("worker: no institutions to enrich (none discovered, none passed).")
+        return
 
     enrich(institutions)
 
