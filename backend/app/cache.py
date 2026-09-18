@@ -2,14 +2,13 @@
 
 Stores past query text + embedding + the structured params and result
 payload used to answer it, so a paraphrased query can be served without
-re-running the LLM rewrite + Inspire search pipeline. Wiring this into the
-search endpoint happens in T3.3 - this module is just the storage and
-nearest-neighbor lookup.
+re-running the LLM rewrite + Inspire search pipeline (wired into the
+search endpoint in T3.3).
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -20,6 +19,10 @@ from app.formatter import FormattedJob
 from app.inspire_client import JobQueryParams
 
 DEFAULT_SIMILARITY_THRESHOLD = 0.8
+
+# Job postings and deadlines don't change minute-to-minute, but new postings
+# do appear, so a cached result shouldn't be served indefinitely.
+DEFAULT_TTL = timedelta(hours=24)
 
 
 class CacheEntry(BaseModel):
@@ -35,8 +38,12 @@ def _vector_literal(vector: list[float]) -> str:
     return "[" + ",".join(repr(x) for x in vector) + "]"
 
 
-def lookup(query_text: str, threshold: float = DEFAULT_SIMILARITY_THRESHOLD) -> CacheEntry | None:
-    """Find the nearest cached entry for a query, if one is close enough."""
+def lookup(
+    query_text: str,
+    threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    max_age: timedelta = DEFAULT_TTL,
+) -> CacheEntry | None:
+    """Find the nearest non-stale cached entry for a query, if one is close enough."""
     vector = _vector_literal(embed(query_text))
 
     with get_engine().connect() as conn:
@@ -46,11 +53,12 @@ def lookup(query_text: str, threshold: float = DEFAULT_SIMILARITY_THRESHOLD) -> 
                 SELECT id, query_text, params, result, created_at,
                        1 - (embedding <=> CAST(:vector AS vector)) AS similarity
                 FROM query_cache
+                WHERE created_at > now() - CAST(:max_age_seconds || ' seconds' AS interval)
                 ORDER BY embedding <=> CAST(:vector AS vector)
                 LIMIT 1
                 """
             ),
-            {"vector": vector},
+            {"vector": vector, "max_age_seconds": max_age.total_seconds()},
         ).mappings().first()
 
     if row is None or row["similarity"] < threshold:

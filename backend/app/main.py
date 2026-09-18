@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from app import cache
 from app.config import get_settings
 from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
@@ -19,6 +20,10 @@ class SearchRequest(BaseModel):
 
 @app.post("/jobs/search", response_model=list[FormattedJob])
 def search(request: SearchRequest) -> list[FormattedJob]:
+    cached = cache.lookup(request.query)
+    if cached is not None:
+        return cached.result
+
     try:
         params = rewrite_query(request.query)
     except QueryRewriteError as exc:
@@ -29,7 +34,9 @@ def search(request: SearchRequest) -> list[FormattedJob]:
     except InspireAPIError as exc:
         raise HTTPException(status_code=502, detail=f"Inspire search failed: {exc}") from exc
 
-    return format_jobs(jobs)
+    result = format_jobs(jobs)
+    cache.store(request.query, params, result)
+    return result
 
 
 def main() -> None:
