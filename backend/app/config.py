@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     database_url: str
     groq_api_key: str
-    embedding_model: str
+    openai_api_key: str
 
 
 @lru_cache

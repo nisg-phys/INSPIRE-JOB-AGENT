@@ -13,6 +13,7 @@ dependencies = [
     "alembic",
     "python-dotenv",
     "groq",
+    "openai",
 ]
 
 [tool.setuptools.packages.find]
