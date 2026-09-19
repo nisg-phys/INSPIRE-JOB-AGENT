@@ -85,9 +85,18 @@ def analyze_query(text: str, provider: LLMProvider | None = None) -> ParsedQuery
         raise QueryRewriteError(f"Could not parse LLM output as ParsedQuery: {raw!r}") from exc
 
 
-def rewrite_query(text: str, provider: LLMProvider | None = None) -> JobQueryParams:
-    """Turn a natural-language query into structured Inspire search params."""
-    parsed = analyze_query(text, provider)
+def to_job_query_params(parsed: ParsedQuery) -> JobQueryParams:
+    """Fold an already-extracted ParsedQuery into Inspire search params.
+
+    Split out from rewrite_query so callers that already have a ParsedQuery
+    (e.g. main.py, after calling analyze_query to check ambiguity) don't
+    need a second LLM call just to get JobQueryParams.
+    """
     terms = [parsed.seniority, parsed.subfield, parsed.location, *parsed.keywords]
     keywords = " ".join(dict.fromkeys(term.strip() for term in terms if term and term.strip()))
     return JobQueryParams(keywords=keywords)
+
+
+def rewrite_query(text: str, provider: LLMProvider | None = None) -> JobQueryParams:
+    """Turn a natural-language query into structured Inspire search params."""
+    return to_job_query_params(analyze_query(text, provider))
