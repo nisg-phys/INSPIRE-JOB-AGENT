@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.inspire_client import JobQueryParams
 from app.llm.base import LLMProvider, LLMProviderError
 from app.llm.groq_provider import GroqProvider
+from app.llm.openai_provider import OpenAIProvider
 
 SYSTEM_PROMPT = """You extract structured search parameters from a natural-language query for physics/astronomy academic job postings.
 
@@ -44,7 +45,10 @@ class ParsedQuery(BaseModel):
 
 @lru_cache
 def _default_provider() -> LLMProvider:
-    return GroqProvider(api_key=get_settings().groq_api_key)
+    settings = get_settings()
+    if settings.llm_provider == "openai":
+        return OpenAIProvider(api_key=settings.openai_api_key)
+    return GroqProvider(api_key=settings.groq_api_key)
 
 
 def _extract(text: str, provider: LLMProvider) -> ParsedQuery:

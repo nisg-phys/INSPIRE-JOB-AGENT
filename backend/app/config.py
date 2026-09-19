@@ -1,5 +1,6 @@
 import sys
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +16,8 @@ class Settings(BaseSettings):
     database_url: str
     groq_api_key: str
     openai_api_key: str
+    # Which LLMProvider adapter query_rewriter uses by default (T5.2).
+    llm_provider: Literal["groq", "openai"] = "groq"
 
 
 @lru_cache
