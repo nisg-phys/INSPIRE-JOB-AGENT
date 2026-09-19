@@ -2,8 +2,8 @@
 
 The provider implements LLMProvider (app/llm/base.py); this module owns
 the prompt and JSON parsing, which stays the same regardless of which
-provider answers it. T5.2/T5.3 add more providers and fallback/retry
-behind the same interface.
+provider (or fallback chain of providers, see app/llm/router.py)
+answers it.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from app.llm.base import LLMProvider, LLMProviderError
 from app.llm.gemini_provider import GeminiProvider
 from app.llm.groq_provider import GroqProvider
 from app.llm.openai_provider import OpenAIProvider
+from app.llm.router import LLMRouter
 
 SYSTEM_PROMPT = """You extract structured search parameters from a natural-language query for physics/astronomy academic job postings.
 
@@ -51,7 +52,17 @@ def _default_provider() -> LLMProvider:
         return OpenAIProvider(api_key=settings.openai_api_key)
     if settings.llm_provider == "gemini":
         return GeminiProvider(api_key=settings.gemini_api_key)
-    return GroqProvider(api_key=settings.groq_api_key)
+    if settings.llm_provider == "groq":
+        return GroqProvider(api_key=settings.groq_api_key)
+
+    # "auto" (default): fall back through free providers first, paid last.
+    return LLMRouter(
+        [
+            ("groq", GroqProvider(api_key=settings.groq_api_key)),
+            ("gemini", GeminiProvider(api_key=settings.gemini_api_key)),
+            ("openai", OpenAIProvider(api_key=settings.openai_api_key)),
+        ]
+    )
 
 
 def _extract(text: str, provider: LLMProvider) -> ParsedQuery:

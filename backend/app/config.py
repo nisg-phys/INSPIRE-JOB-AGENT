@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     groq_api_key: str
     openai_api_key: str
     gemini_api_key: str
-    # Which LLMProvider adapter query_rewriter uses by default (T5.2).
-    llm_provider: Literal["groq", "openai", "gemini"] = "groq"
+    # Which LLMProvider query_rewriter uses. "auto" (default) is the T5.3
+    # fallback chain (groq -> gemini -> openai); the others force a single
+    # provider, mainly useful for testing/debugging one in isolation.
+    llm_provider: Literal["auto", "groq", "openai", "gemini"] = "auto"
 
 
 @lru_cache
