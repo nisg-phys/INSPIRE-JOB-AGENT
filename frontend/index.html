@@ -33,6 +33,16 @@
       #status {
         margin-top: 1rem;
       }
+      #clarification {
+        margin-top: 1rem;
+        padding: 1rem;
+        border: 1px solid #ccc;
+        background: #fafafa;
+      }
+      #clarification p {
+        margin-top: 0;
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
@@ -50,6 +60,15 @@
     </form>
 
     <div id="status"></div>
+
+    <div id="clarification" hidden>
+      <p id="clarification-question"></p>
+      <form id="clarification-form">
+        <input type="text" id="clarification-answer" size="50" required />
+        <button type="submit">Answer</button>
+      </form>
+    </div>
+
     <button id="download-csv" type="button" hidden>Download CSV</button>
     <div id="results"></div>
 
@@ -62,8 +81,16 @@
       const statusEl = document.getElementById("status");
       const resultsEl = document.getElementById("results");
       const downloadButton = document.getElementById("download-csv");
+      const clarificationEl = document.getElementById("clarification");
+      const clarificationQuestionEl = document.getElementById("clarification-question");
+      const clarificationForm = document.getElementById("clarification-form");
+      const clarificationAnswerInput = document.getElementById("clarification-answer");
 
       let lastResults = [];
+      // The query a pending clarification question belongs to - kept
+      // separate from the (possibly since-edited) main query box, so the
+      // answer pairs with the query that actually triggered it.
+      let pendingQuery = null;
 
       function escapeHtml(value) {
         const div = document.createElement("div");
@@ -179,27 +206,32 @@
         URL.revokeObjectURL(url);
       });
 
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
+      async function performSearch(query, clarificationAnswer) {
         statusEl.textContent = "Loading...";
         resultsEl.innerHTML = "";
         downloadButton.hidden = true;
+        clarificationEl.hidden = true;
         lastResults = [];
 
         try {
           const response = await fetch(`${API_BASE_URL}/jobs/search`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: queryInput.value }),
+            body: JSON.stringify({ query, clarification_answer: clarificationAnswer || undefined }),
           });
           const data = await response.json();
 
           if (data.needs_clarification) {
-            // T7.4 makes this interactive; for now, just surface the question.
-            statusEl.textContent = data.clarification_question;
+            pendingQuery = query;
+            clarificationQuestionEl.textContent = data.clarification_question;
+            clarificationAnswerInput.value = "";
+            clarificationEl.hidden = false;
+            statusEl.textContent = "";
+            clarificationAnswerInput.focus();
             return;
           }
 
+          pendingQuery = null;
           lastResults = data.results;
           downloadButton.hidden = lastResults.length === 0;
 
@@ -210,6 +242,16 @@
         } catch (err) {
           statusEl.textContent = `Error: ${err}`;
         }
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        performSearch(queryInput.value, null);
+      });
+
+      clarificationForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        performSearch(pendingQuery, clarificationAnswerInput.value);
       });
     </script>
   </body>
