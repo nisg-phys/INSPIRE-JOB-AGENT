@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app import cache
@@ -14,6 +15,17 @@ from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_pa
 get_settings()
 
 app = FastAPI(title="Inspire Jobs Agent")
+
+# Permissive for now (no auth, local dev + free-tier deploy target) - the
+# frontend (T7.x) calls this API cross-origin from a separate static host.
+# Worth tightening to specific origins once there's a real deployed frontend
+# URL (T8.4).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class SearchRequest(BaseModel):

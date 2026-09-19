@@ -5,6 +5,45 @@
     <title>Inspire Jobs Agent</title>
   </head>
   <body>
-    <p>frontend: placeholder entrypoint</p>
+    <h1>Inspire Jobs Agent</h1>
+
+    <form id="search-form">
+      <input
+        type="text"
+        id="query"
+        placeholder="e.g. postdoc in string theory"
+        size="50"
+        required
+      />
+      <button type="submit">Search</button>
+    </form>
+
+    <pre id="results"></pre>
+
+    <script>
+      // T8.4 will point this at the deployed backend instead.
+      const API_BASE_URL = "http://localhost:8000";
+
+      const form = document.getElementById("search-form");
+      const queryInput = document.getElementById("query");
+      const resultsEl = document.getElementById("results");
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        resultsEl.textContent = "Loading...";
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/jobs/search`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: queryInput.value }),
+          });
+          const data = await response.json();
+          resultsEl.textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+          resultsEl.textContent = `Error: ${err}`;
+        }
+      });
+    </script>
   </body>
 </html>
