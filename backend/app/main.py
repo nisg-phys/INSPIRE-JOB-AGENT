@@ -10,7 +10,7 @@ from app import cache
 from app.config import get_settings
 from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
-from app.institution_papers import get_recent_papers
+from app.institution_papers import get_recent_papers, select_relevant_papers
 from app.jobs_log import log_jobs
 from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_params
@@ -106,7 +106,7 @@ def search(request: SearchRequest) -> SearchResponse:
         if request.clarification_answer:
             # Second turn: the user already resolved the ambiguity, so run
             # the search directly rather than re-checking ambiguous.
-            params = to_job_query_params(analyze_query(effective_query))
+            parsed = analyze_query(effective_query)
         else:
             parsed = analyze_query(request.query)
             logger.info("ambiguity_check", extra={"ambiguous": parsed.ambiguous})
@@ -115,7 +115,7 @@ def search(request: SearchRequest) -> SearchResponse:
                     needs_clarification=True,
                     clarification_question=parsed.clarification_question,
                 )
-            params = to_job_query_params(parsed)
+        params = to_job_query_params(parsed)
     except QueryRewriteError as exc:
         logger.error("query_rewrite_failed", extra={"error": str(exc)})
         raise HTTPException(status_code=502, detail=f"Query rewriting failed: {exc}") from exc
@@ -151,12 +151,16 @@ def search(request: SearchRequest) -> SearchResponse:
         },
     )
     for raw_job, formatted_job in zip(jobs, result):
+        candidate_papers = []
         seen_record_ids: set[str] = set()
         for institution in raw_job.institutions:
             for paper in papers_by_institution.get(institution, []):
                 if paper.record_id not in seen_record_ids:
                     seen_record_ids.add(paper.record_id)
-                    formatted_job.recent_papers.append(paper)
+                    candidate_papers.append(paper)
+        # Prefer papers matching the query's subfield category over just
+        # showing the institution's most recent output overall.
+        formatted_job.recent_papers = select_relevant_papers(candidate_papers, parsed.categories)
 
     cache.store(effective_query, params, result)
     return SearchResponse(cached=False, results=result)

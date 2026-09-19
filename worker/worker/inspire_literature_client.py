@@ -16,6 +16,11 @@ class Paper(BaseModel):
     record_id: str
     title: str
     citation_count: int = 0
+    # INSPIRE's own normalized category terms (e.g. "Gravitation and
+    # Cosmology", "Theory-HEP") - present on every record, not just arXiv
+    # ones. Lets the backend prefer papers relevant to a job's subfield
+    # instead of just showing an institution's most recent output overall.
+    categories: list[str] = []
 
 
 def _request(endpoint: str, params: dict) -> dict:
@@ -34,8 +39,13 @@ def _request(endpoint: str, params: dict) -> dict:
         raise InspireAPIError("Could not connect to INSPIRE.") from exc
 
 
-def recent_papers(institution: str, size: int = 5) -> list[Paper]:
-    """Fetch the most recent literature records affiliated with an institution."""
+def recent_papers(institution: str, size: int = 20) -> list[Paper]:
+    """Fetch the most recent literature records affiliated with an institution.
+
+    Fetches more than a job listing would ever show (default 20, was 5) so
+    the backend has enough of an institution's recent output to filter down
+    to whatever's actually relevant to a given posting's subfield.
+    """
     params = {"q": f'aff "{institution}"', "size": size, "sort": "mostrecent"}
     data = _request("literature", params)
     hits = data["hits"]["hits"]
@@ -48,6 +58,9 @@ def recent_papers(institution: str, size: int = 5) -> list[Paper]:
                 record_id=str(metadata.get("control_number", "")),
                 title=metadata["titles"][0]["title"],
                 citation_count=metadata.get("citation_count", 0),
+                categories=[
+                    c["term"] for c in metadata.get("inspire_categories", []) if c.get("term")
+                ],
             )
         )
     return papers

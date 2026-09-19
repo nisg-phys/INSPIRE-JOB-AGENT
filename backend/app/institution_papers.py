@@ -18,6 +18,27 @@ class Paper(BaseModel):
     record_id: str
     title: str
     citation_count: int = 0
+    # INSPIRE's normalized category terms (e.g. "Theory-HEP"). Missing on
+    # rows enriched before this field existed - defaults to empty, callers
+    # already treat "no category match" as "fall back to most recent".
+    categories: list[str] = []
+
+
+DEFAULT_PAPER_LIMIT = 5
+
+
+def select_relevant_papers(
+    papers: list[Paper], categories: list[str], limit: int = DEFAULT_PAPER_LIMIT
+) -> list[Paper]:
+    """Prefer papers matching the query's subfield categories; fall back to
+    most recent (the stored order) if none match, rather than showing an
+    institution's unrelated output just because it's recent.
+    """
+    if categories:
+        matches = [paper for paper in papers if set(paper.categories) & set(categories)]
+        if matches:
+            return matches[:limit]
+    return papers[:limit]
 
 
 def get_recent_papers(institutions: list[str]) -> dict[str, list[Paper]]:
