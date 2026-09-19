@@ -10,7 +10,8 @@ from app import cache
 from app.config import get_settings
 from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
-from app.institution_papers import get_recent_papers, select_relevant_papers
+from app.inspire_literature_client import InspireAPIError as LiteratureAPIError
+from app.institution_papers import fetch_and_store, get_recent_papers, select_relevant_papers
 from app.jobs_log import log_jobs
 from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_params
@@ -23,6 +24,13 @@ get_settings()
 setup_tracing()
 setup_logging()
 logger = logging.getLogger("app.request")
+
+# Bounds how many never-before-seen institutions a single search request
+# will fetch live from Inspire's literature API (see the on-demand fallback
+# in the search endpoint below) - each is an extra ~1s+ HTTP call, so this
+# caps the worst case added latency rather than letting one broad query
+# block on an unbounded number of them.
+MAX_ON_DEMAND_ENRICH = 5
 
 app = FastAPI(title="Inspire Jobs Agent")
 
@@ -146,11 +154,32 @@ def search(request: SearchRequest) -> SearchResponse:
     # so their jobs keep the default empty recent_papers list.
     institutions = sorted({name for job in jobs for name in job.institutions})
     papers_by_institution = get_recent_papers(institutions)
+
+    # On-demand fallback: fetch live for institutions still missing, rather
+    # than making a never-before-seen institution wait for the next worker
+    # run. Capped so one broad query naming many new institutions can't
+    # balloon this request's latency - anything past the cap just stays
+    # "not yet available" until the worker's next pass.
+    missing = [name for name in institutions if name not in papers_by_institution]
+    on_demand_fetched = 0
+    on_demand_failed = 0
+    for institution in missing[:MAX_ON_DEMAND_ENRICH]:
+        try:
+            papers_by_institution[institution] = fetch_and_store(institution)
+            on_demand_fetched += 1
+        except LiteratureAPIError as exc:
+            on_demand_failed += 1
+            logger.warning(
+                "on_demand_enrichment_failed", extra={"institution": institution, "error": str(exc)}
+            )
+
     logger.info(
         "institution_enrichment",
         extra={
             "institutions_seen": len(institutions),
             "institutions_enriched": len(papers_by_institution),
+            "on_demand_fetched": on_demand_fetched,
+            "on_demand_failed": on_demand_failed,
         },
     )
     for raw_job, formatted_job in zip(jobs, result):

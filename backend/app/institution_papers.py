@@ -1,9 +1,9 @@
-"""Read-only lookup of institution_papers (populated by the worker, Phase 4).
+"""Lookup of institution_papers, primarily populated by the worker (Phase 4).
 
-The query path only ever reads this table - it never calls Inspire's
-literature API live. Institutions the worker hasn't enriched yet simply
-aren't in the table; callers should treat that as "no papers yet", not
-an error.
+The query path normally only reads this table - it doesn't call Inspire's
+literature API live. The one exception is fetch_and_store, an on-demand
+fallback main.py uses for institutions still missing after a search, so a
+never-before-seen institution doesn't have to wait for the next worker run.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db import get_engine
+from app.inspire_literature_client import recent_papers
 
 
 class Paper(BaseModel):
@@ -39,6 +40,41 @@ def select_relevant_papers(
         if matches:
             return matches[:limit]
     return papers[:limit]
+
+
+def fetch_and_store(institution: str) -> list[Paper]:
+    """On-demand fallback for an institution the worker hasn't enriched yet.
+
+    The worker's daily cron (worker/worker/enrichment.py) is still the
+    primary path - it's cheap and keeps this table warm without ever
+    touching the query path's latency. This exists only to close the gap
+    on an institution's *first* appearance, so its very first search
+    doesn't show "Not yet available" for a whole day. Same upsert shape
+    as the worker's enrich_institution, so either one can freshen a row.
+
+    Raises app.inspire_literature_client.InspireAPIError on failure -
+    callers should decide how to degrade (main.py treats it the same as
+    "no papers yet" rather than failing the whole search).
+    """
+    # recent_papers returns inspire_literature_client.Paper - structurally
+    # identical to this module's Paper, but re-validate into the local type
+    # so callers get one consistent Paper class regardless of source.
+    papers = [Paper.model_validate(p.model_dump()) for p in recent_papers(institution)]
+    payload = "[" + ",".join(paper.model_dump_json() for paper in papers) + "]"
+
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO institution_papers (institution, papers, last_updated)
+                VALUES (:institution, CAST(:papers AS jsonb), now())
+                ON CONFLICT (institution) DO UPDATE
+                SET papers = EXCLUDED.papers, last_updated = EXCLUDED.last_updated
+                """
+            ),
+            {"institution": institution, "papers": payload},
+        )
+    return papers
 
 
 def get_recent_papers(institutions: list[str]) -> dict[str, list[Paper]]:
