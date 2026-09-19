@@ -139,6 +139,7 @@
                 <td>${textOrDash(job.institution)}</td>
                 <td>${textOrDash(job.deadline)}</td>
                 <td>${textOrDash(job.location)}</td>
+                <td>${textOrDash(job.apply_via)}</td>
                 <td>${textOrDash((job.tags || []).join(", "))}</td>
                 <td>${papersCellHtml(job.recent_papers)}</td>
               </tr>`
@@ -153,6 +154,7 @@
                 <th>Institution</th>
                 <th>Deadline</th>
                 <th>Location</th>
+                <th>Apply Via</th>
                 <th>Tags</th>
                 <th>Recent Papers</th>
               </tr>
@@ -174,7 +176,16 @@
       }
 
       function buildCsv(jobs) {
-        const header = ["Title", "Institution", "Deadline", "Location", "Tags", "Recent Papers", "Link"];
+        const header = [
+          "Title",
+          "Institution",
+          "Deadline",
+          "Location",
+          "Apply Via",
+          "Tags",
+          "Recent Papers",
+          "Link",
+        ];
         const lines = [header.map(csvField).join(",")];
         for (const job of jobs) {
           lines.push(
@@ -183,6 +194,7 @@
               job.institution,
               job.deadline ?? "",
               job.location ?? "",
+              job.apply_via ?? "",
               (job.tags || []).join(", "),
               papersToCsvField(job.recent_papers),
               job.link ?? "",
