@@ -96,6 +96,24 @@ class SearchResponse(BaseModel):
 
 @app.post("/jobs/search", response_model=SearchResponse)
 def search(request: SearchRequest) -> SearchResponse:
+    # Last-resort safety net: an unexpected failure anywhere in _search
+    # (e.g. a dropped DB connection - see db.py's pool_pre_ping for the
+    # actual fix, this is the backstop for whatever that doesn't cover)
+    # would otherwise bubble up as a raw, unhandled 500 with a traceback in
+    # the response. HTTPExceptions are deliberate (already have a clean
+    # status/detail from the try/excepts below) and pass through untouched.
+    try:
+        return _search(request)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("search_failed_unexpectedly", extra={"error": str(exc)})
+        raise HTTPException(
+            status_code=503, detail="Search is temporarily unavailable. Please try again."
+        ) from exc
+
+
+def _search(request: SearchRequest) -> SearchResponse:
     effective_query = request.query
     if request.clarification_answer:
         effective_query = f"{request.query} ({request.clarification_answer})"

@@ -15,4 +15,12 @@ def _psycopg_url(url: str) -> str:
 
 @lru_cache
 def get_engine() -> Engine:
-    return create_engine(_psycopg_url(get_settings().database_url))
+    # See backend/app/db.py's get_engine for why: Neon can close an idle
+    # pooled connection server-side, and a run here makes sequential DB
+    # writes with an Inspire API call between each - long enough for that
+    # to happen mid-run without pre_ping/recycle.
+    return create_engine(
+        _psycopg_url(get_settings().database_url),
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
