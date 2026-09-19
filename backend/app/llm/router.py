@@ -10,11 +10,14 @@ replacement anywhere a single provider was used.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Callable
 
 from app.llm.base import LLMProvider, LLMProviderError
+
+logger = logging.getLogger("app.llm.router")
 
 DEFAULT_COOLDOWN_SECONDS = 60.0
 
@@ -49,12 +52,27 @@ class LLMRouter:
 
         for entry in self._entries:
             if entry.cooldown_until > now:
+                logger.info("llm_provider_skipped", extra={"provider": entry.name, "reason": "cooling_down"})
                 errors.append(f"{entry.name}: skipped (cooling down)")
                 continue
             try:
-                return entry.provider.complete_json(system, user)
+                start = time.monotonic()
+                result = entry.provider.complete_json(system, user)
+                logger.info(
+                    "llm_provider_succeeded",
+                    extra={
+                        "provider": entry.name,
+                        "duration_ms": round((time.monotonic() - start) * 1000, 1),
+                    },
+                )
+                return result
             except LLMProviderError as exc:
                 entry.cooldown_until = self._clock() + self._cooldown_seconds
+                logger.warning(
+                    "llm_provider_failed",
+                    extra={"provider": entry.name, "error": str(exc), "cooldown_seconds": self._cooldown_seconds},
+                )
                 errors.append(f"{entry.name}: {exc}")
 
+        logger.error("llm_all_providers_failed", extra={"errors": errors})
         raise AllProvidersFailedError("All LLM providers unavailable: " + "; ".join(errors))

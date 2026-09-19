@@ -1,4 +1,8 @@
-from fastapi import FastAPI, HTTPException
+import logging
+import time
+import uuid
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -8,11 +12,15 @@ from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
 from app.institution_papers import get_recent_papers
 from app.jobs_log import log_jobs
+from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_params
 
 # Fail loudly at import time (i.e. before uvicorn starts serving) if required
 # config is missing, rather than failing on the first request.
 get_settings()
+
+setup_logging()
+logger = logging.getLogger("app.request")
 
 app = FastAPI(title="Inspire Jobs Agent")
 
@@ -26,6 +34,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    token = request_id_var.set(request_id)
+    start = time.monotonic()
+    logger.info("request_started", extra={"method": request.method, "path": request.url.path})
+    try:
+        response = await call_next(request)
+        duration_ms = round((time.monotonic() - start) * 1000, 1)
+        logger.info(
+            "request_completed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+        response.headers["x-request-id"] = request_id
+        return response
+    except Exception:
+        duration_ms = round((time.monotonic() - start) * 1000, 1)
+        logger.exception(
+            "request_failed",
+            extra={"method": request.method, "path": request.url.path, "duration_ms": duration_ms},
+        )
+        raise
+    finally:
+        request_id_var.reset(token)
 
 
 class SearchRequest(BaseModel):
@@ -50,7 +89,16 @@ def search(request: SearchRequest) -> SearchResponse:
     if request.clarification_answer:
         effective_query = f"{request.query} ({request.clarification_answer})"
 
+    cache_start = time.monotonic()
     cached = cache.lookup(effective_query)
+    logger.info(
+        "cache_lookup",
+        extra={
+            "hit": cached is not None,
+            "similarity": cached.similarity if cached else None,
+            "duration_ms": round((time.monotonic() - cache_start) * 1000, 1),
+        },
+    )
     if cached is not None:
         return SearchResponse(cached=True, results=cached.result)
 
@@ -61,6 +109,7 @@ def search(request: SearchRequest) -> SearchResponse:
             params = to_job_query_params(analyze_query(effective_query))
         else:
             parsed = analyze_query(request.query)
+            logger.info("ambiguity_check", extra={"ambiguous": parsed.ambiguous})
             if parsed.ambiguous:
                 return SearchResponse(
                     needs_clarification=True,
@@ -68,11 +117,22 @@ def search(request: SearchRequest) -> SearchResponse:
                 )
             params = to_job_query_params(parsed)
     except QueryRewriteError as exc:
+        logger.error("query_rewrite_failed", extra={"error": str(exc)})
         raise HTTPException(status_code=502, detail=f"Query rewriting failed: {exc}") from exc
 
     try:
+        inspire_start = time.monotonic()
         jobs = search_jobs(params)
+        logger.info(
+            "inspire_search",
+            extra={
+                "keywords": params.keywords,
+                "job_count": len(jobs),
+                "duration_ms": round((time.monotonic() - inspire_start) * 1000, 1),
+            },
+        )
     except InspireAPIError as exc:
+        logger.error("inspire_search_failed", extra={"error": str(exc)})
         raise HTTPException(status_code=502, detail=f"Inspire search failed: {exc}") from exc
 
     log_jobs(jobs)
@@ -81,8 +141,14 @@ def search(request: SearchRequest) -> SearchResponse:
     # Read-only join against institution_papers (Phase 4's enrichment worker
     # output). Institutions not yet enriched are simply absent from the map,
     # so their jobs keep the default empty recent_papers list.
-    papers_by_institution = get_recent_papers(
-        sorted({name for job in jobs for name in job.institutions})
+    institutions = sorted({name for job in jobs for name in job.institutions})
+    papers_by_institution = get_recent_papers(institutions)
+    logger.info(
+        "institution_enrichment",
+        extra={
+            "institutions_seen": len(institutions),
+            "institutions_enriched": len(papers_by_institution),
+        },
     )
     for raw_job, formatted_job in zip(jobs, result):
         seen_record_ids: set[str] = set()
