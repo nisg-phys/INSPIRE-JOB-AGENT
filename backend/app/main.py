@@ -26,13 +26,14 @@ logger = logging.getLogger("app.request")
 
 app = FastAPI(title="Inspire Jobs Agent")
 
-# Permissive for now (no auth, local dev + free-tier deploy target) - the
-# frontend (T7.x) calls this API cross-origin from a separate static host.
-# Worth tightening to specific origins once there's a real deployed frontend
-# URL (T8.4).
+# The deployed frontend (T8.4) is served from the same Firebase Hosting
+# domain as this API (via a rewrite to Cloud Run), so its requests are
+# same-origin and don't need CORS at all. This only matters for local dev,
+# where the frontend runs on a separate static server (see frontend's
+# isLocalDev check) and for direct API testing/tooling.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8080", "https://pulsar-jobs-agent.web.app"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

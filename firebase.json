@@ -1,0 +1,32 @@
+{
+  "hosting": {
+    "public": "frontend",
+    "rewrites": [
+      {
+        "source": "/jobs/**",
+        "run": {
+          "serviceId": "pulsar-backend",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/docs",
+        "run": {
+          "serviceId": "pulsar-backend",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/openapi.json",
+        "run": {
+          "serviceId": "pulsar-backend",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

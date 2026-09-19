@@ -419,8 +419,13 @@
     </footer>
 
     <script>
-      // T8.4 will point this at the deployed backend instead.
-      const API_BASE_URL = "http://localhost:8000";
+      // In production this page is served from the same Firebase Hosting
+      // domain as the backend (via a rewrite to Cloud Run), so requests are
+      // same-origin and API_BASE_URL can just be relative. Locally, the
+      // frontend and backend run as two separate dev servers, so it needs
+      // to point at the backend explicitly.
+      const isLocalDev = ["localhost", "127.0.0.1"].includes(location.hostname);
+      const API_BASE_URL = isLocalDev ? "http://localhost:8000" : "";
 
       const form = document.getElementById("search-form");
       const queryInput = document.getElementById("query");
