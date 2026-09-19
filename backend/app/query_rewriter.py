@@ -1,21 +1,22 @@
-"""Natural-language query rewriting via a single LLM provider (Groq).
+"""Natural-language query rewriting via a pluggable LLM provider.
 
-Turns a free-text search query into structured JobQueryParams. The provider
-is hardcoded for now; T5.1 pulls this behind a router interface once a
-second provider is wired up.
+The provider implements LLMProvider (app/llm/base.py); this module owns
+the prompt and JSON parsing, which stays the same regardless of which
+provider answers it. T5.2/T5.3 add more providers and fallback/retry
+behind the same interface.
 """
 
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 
-import groq
 from pydantic import BaseModel, ValidationError
 
 from app.config import get_settings
 from app.inspire_client import JobQueryParams
-
-MODEL = "openai/gpt-oss-120b"
+from app.llm.base import LLMProvider, LLMProviderError
+from app.llm.groq_provider import GroqProvider
 
 SYSTEM_PROMPT = """You extract structured search parameters from a natural-language query for physics/astronomy academic job postings.
 
@@ -41,32 +42,26 @@ class ParsedQuery(BaseModel):
     keywords: list[str] = []
 
 
-def _extract(text: str) -> ParsedQuery:
-    settings = get_settings()
-    client = groq.Groq(api_key=settings.groq_api_key)
-    try:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0,
-        )
-    except groq.APIError as exc:
-        raise QueryRewriteError(f"Groq request failed: {exc}") from exc
+@lru_cache
+def _default_provider() -> LLMProvider:
+    return GroqProvider(api_key=get_settings().groq_api_key)
 
-    raw = response.choices[0].message.content
+
+def _extract(text: str, provider: LLMProvider) -> ParsedQuery:
+    try:
+        raw = provider.complete_json(SYSTEM_PROMPT, text)
+    except LLMProviderError as exc:
+        raise QueryRewriteError(str(exc)) from exc
+
     try:
         return ParsedQuery.model_validate(json.loads(raw))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise QueryRewriteError(f"Could not parse LLM output as ParsedQuery: {raw!r}") from exc
 
 
-def rewrite_query(text: str) -> JobQueryParams:
+def rewrite_query(text: str, provider: LLMProvider | None = None) -> JobQueryParams:
     """Turn a natural-language query into structured Inspire search params."""
-    parsed = _extract(text)
+    parsed = _extract(text, provider or _default_provider())
     terms = [parsed.seniority, parsed.subfield, parsed.location, *parsed.keywords]
     keywords = " ".join(dict.fromkeys(term.strip() for term in terms if term and term.strip()))
     return JobQueryParams(keywords=keywords)
