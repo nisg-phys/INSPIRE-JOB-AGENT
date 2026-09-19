@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import openai
+import opik
 
 from app.llm.base import LLMProviderError
 
@@ -13,6 +14,7 @@ class OpenAIProvider:
     def __init__(self, api_key: str) -> None:
         self._client = openai.OpenAI(api_key=api_key)
 
+    @opik.track(type="llm", name="openai.complete_json")
     def complete_json(self, system: str, user: str) -> str:
         try:
             response = self._client.chat.completions.create(

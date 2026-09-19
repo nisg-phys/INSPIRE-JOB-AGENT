@@ -2,75 +2,421 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Inspire Jobs Agent</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pulsar — Physics &amp; Astronomy Job Search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <style>
-      body {
-        font-family: system-ui, sans-serif;
-        margin: 2rem;
+      :root {
+        --bg: #f5f6fb;
+        --surface: #ffffff;
+        --border: #e3e5ef;
+        --text: #1b1d2b;
+        --text-muted: #6b7085;
+        --accent: #5b4dee;
+        --accent-dark: #4638d1;
+        --accent-soft: #edeaff;
+        --success: #1a7f5a;
+        --success-soft: #e4f7ef;
+        --radius: 14px;
+        --shadow: 0 1px 2px rgba(20, 20, 43, 0.04), 0 8px 24px rgba(20, 20, 43, 0.06);
       }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Inter", system-ui, sans-serif;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+      }
+
+      .hero {
+        background: linear-gradient(135deg, #2d2467 0%, #4638d1 55%, #6d5bf2 100%);
+        color: #fff;
+        padding: 3rem 1.5rem 4.5rem;
+      }
+
+      .hero-inner {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-weight: 800;
+        font-size: 1.4rem;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.1rem;
+        height: 2.1rem;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.15);
+        font-size: 1.2rem;
+      }
+
+      .hero h1 {
+        font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin: 1.4rem 0 0.7rem;
+      }
+
+      .hero p {
+        max-width: 640px;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 1.02rem;
+        margin: 0 0 1.6rem;
+      }
+
+      .hero-tag {
+        display: inline-block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        margin-bottom: 1rem;
+      }
+
+      main {
+        max-width: 900px;
+        margin: -2.6rem auto 3rem;
+        padding: 0 1.5rem;
+      }
+
+      .search-card {
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 1.5rem;
+        border: 1px solid var(--border);
+      }
+
+      #search-form {
+        display: flex;
+        gap: 0.6rem;
+      }
+
+      #query {
+        flex: 1;
+        font: inherit;
+        font-size: 1rem;
+        padding: 0.8rem 1rem;
+        border: 1.5px solid var(--border);
+        border-radius: 10px;
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      #query:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+
+      #search-form button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: 0.8rem 1.4rem;
+        font-weight: 600;
+        transition: background 0.15s ease;
+      }
+
+      #search-form button:hover {
+        background: var(--accent-dark);
+      }
+
+      .examples {
+        margin-top: 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .examples span {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-right: 0.2rem;
+      }
+
+      .example-chip {
+        background: var(--accent-soft);
+        color: var(--accent-dark);
+        border: none;
+        border-radius: 999px;
+        padding: 0.4rem 0.85rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: background 0.15s ease;
+      }
+
+      .example-chip:hover {
+        background: #ddd7ff;
+      }
+
+      #status {
+        margin-top: 1.2rem;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+        min-height: 1.2rem;
+      }
+
+      #clarification {
+        margin-top: 1.2rem;
+        padding: 1.1rem 1.2rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #fbfbff;
+      }
+
+      #clarification p {
+        margin: 0 0 0.7rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      #clarification-form {
+        display: flex;
+        gap: 0.6rem;
+      }
+
+      #clarification-answer {
+        flex: 1;
+        font: inherit;
+        padding: 0.65rem 0.9rem;
+        border: 1.5px solid var(--border);
+        border-radius: 10px;
+        outline: none;
+      }
+
+      #clarification-answer:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      #clarification-form button {
+        background: var(--text);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: 0.65rem 1.1rem;
+        font-weight: 600;
+      }
+
+      #download-csv {
+        margin-top: 1.2rem;
+        background: var(--surface);
+        color: var(--accent-dark);
+        border: 1.5px solid var(--accent);
+        border-radius: 10px;
+        padding: 0.55rem 1rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+
+      #download-csv:hover {
+        background: var(--accent-soft);
+      }
+
+      #results {
+        margin-top: 1.2rem;
+      }
+
+      .results-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
       table {
         border-collapse: collapse;
         width: 100%;
-        margin-top: 1rem;
       }
+
       th,
       td {
-        border: 1px solid #ccc;
-        padding: 0.5rem;
+        padding: 0.85rem 1rem;
         text-align: left;
         vertical-align: top;
+        font-size: 0.92rem;
+        border-bottom: 1px solid var(--border);
       }
+
       th {
-        background: #f0f0f0;
+        background: #f8f8fc;
+        color: var(--text-muted);
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
+
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      tbody tr:hover {
+        background: #fafaff;
+      }
+
+      td a {
+        color: var(--accent-dark);
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      td a:hover {
+        text-decoration: underline;
+      }
+
       td ul {
         margin: 0;
         padding-left: 1.1rem;
       }
+
+      td li {
+        margin-bottom: 0.25rem;
+      }
+
+      .apply-pill {
+        display: inline-block;
+        background: var(--success-soft);
+        color: var(--success);
+        border-radius: 999px;
+        padding: 0.25rem 0.65rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
       .muted {
-        color: #888;
+        color: #a6a9bb;
       }
-      #status {
-        margin-top: 1rem;
+
+      .empty-state {
+        padding: 2.5rem 1.5rem;
+        text-align: center;
+        color: var(--text-muted);
       }
-      #clarification {
-        margin-top: 1rem;
-        padding: 1rem;
-        border: 1px solid #ccc;
-        background: #fafafa;
+
+      footer {
+        max-width: 900px;
+        margin: 0 auto 2.5rem;
+        padding: 0 1.5rem;
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        text-align: center;
       }
-      #clarification p {
-        margin-top: 0;
-        font-weight: bold;
+
+      footer a {
+        color: var(--accent-dark);
+      }
+
+      @media (max-width: 640px) {
+        #search-form {
+          flex-direction: column;
+        }
+        #clarification-form {
+          flex-direction: column;
+        }
+        th,
+        td {
+          padding: 0.7rem 0.6rem;
+          font-size: 0.85rem;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>Inspire Jobs Agent</h1>
-
-    <form id="search-form">
-      <input
-        type="text"
-        id="query"
-        placeholder="e.g. postdoc in string theory"
-        size="50"
-        required
-      />
-      <button type="submit">Search</button>
-    </form>
-
-    <div id="status"></div>
-
-    <div id="clarification" hidden>
-      <p id="clarification-question"></p>
-      <form id="clarification-form">
-        <input type="text" id="clarification-answer" size="50" required />
-        <button type="submit">Answer</button>
-      </form>
+    <div class="hero">
+      <div class="hero-inner">
+        <div class="brand"><span class="brand-mark">✦</span> Pulsar</div>
+        <h1>Find your next physics &amp; astronomy research position</h1>
+        <p>
+          Describe what you're looking for in plain English — a subfield, a career stage, a
+          location, anything — and Pulsar turns it into a precise search over live INSPIRE-HEP job
+          postings. Every result comes with where to apply and, where available, recent relevant
+          papers from that institution, so you can gauge fit before you write a cover letter.
+        </p>
+      </div>
     </div>
 
-    <button id="download-csv" type="button" hidden>Download CSV</button>
-    <div id="results"></div>
+    <main>
+      <div class="search-card">
+        <form id="search-form">
+          <input
+            type="text"
+            id="query"
+            placeholder="e.g. postdoc in string theory, or faculty jobs in cosmology in Europe"
+            required
+          />
+          <button type="submit">Search</button>
+        </form>
+
+        <div class="examples">
+          <span>Try:</span>
+          <button type="button" class="example-chip" data-query="postdoc in condensed matter theory">
+            postdoc in condensed matter theory
+          </button>
+          <button type="button" class="example-chip" data-query="faculty jobs in cosmology">
+            faculty jobs in cosmology
+          </button>
+          <button type="button" class="example-chip" data-query="PhD positions in particle physics in Europe">
+            PhD positions in particle physics in Europe
+          </button>
+          <button type="button" class="example-chip" data-query="staff scientist in instrumentation">
+            staff scientist in instrumentation
+          </button>
+        </div>
+
+        <div id="status"></div>
+
+        <div id="clarification" hidden>
+          <p id="clarification-question"></p>
+          <form id="clarification-form">
+            <input type="text" id="clarification-answer" required />
+            <button type="submit">Answer</button>
+          </form>
+        </div>
+
+        <button id="download-csv" type="button" hidden>Download CSV</button>
+      </div>
+
+      <div id="results"></div>
+    </main>
+
+    <footer>
+      Pulsar searches public job postings and literature data from
+      <a href="https://inspirehep.net" target="_blank" rel="noopener">INSPIRE-HEP</a>. It is an
+      independent tool and is not affiliated with or endorsed by INSPIRE-HEP.
+    </footer>
 
     <script>
       // T8.4 will point this at the deployed backend instead.
@@ -85,6 +431,7 @@
       const clarificationQuestionEl = document.getElementById("clarification-question");
       const clarificationForm = document.getElementById("clarification-form");
       const clarificationAnswerInput = document.getElementById("clarification-answer");
+      const exampleChips = document.querySelectorAll(".example-chip");
 
       let lastResults = [];
       // The query a pending clarification question belongs to - kept
@@ -113,6 +460,11 @@
         return value ? escapeHtml(value) : '<span class="muted">—</span>';
       }
 
+      function applyViaHtml(value) {
+        if (!value) return '<span class="muted">—</span>';
+        return `<span class="apply-pill">${escapeHtml(value)}</span>`;
+      }
+
       // Enrichment data (T4.5) is empty, not missing, when a job's
       // institution hasn't been processed by the worker yet - degrade to a
       // plain note rather than an empty cell that looks broken.
@@ -121,14 +473,17 @@
           return '<span class="muted">Not yet available</span>';
         }
         const items = papers
-          .map((p) => `<li>${escapeHtml(p.title)} (${p.citation_count} citations)</li>`)
+          .map((p) => {
+            const link = `https://inspirehep.net/literature/${encodeURIComponent(p.record_id)}`;
+            return `<li><a href="${link}" target="_blank" rel="noopener">${escapeHtml(p.title)}</a> (${p.citation_count} citations)</li>`;
+          })
           .join("");
         return `<ul>${items}</ul>`;
       }
 
       function renderTable(jobs) {
         if (!jobs || jobs.length === 0) {
-          return '<p class="muted">No results.</p>';
+          return '<div class="results-card"><div class="empty-state">No results. Try a broader query.</div></div>';
         }
 
         const rows = jobs
@@ -139,26 +494,28 @@
                 <td>${textOrDash(job.institution)}</td>
                 <td>${textOrDash(job.deadline)}</td>
                 <td>${textOrDash(job.location)}</td>
-                <td>${textOrDash(job.apply_via)}</td>
+                <td>${applyViaHtml(job.apply_via)}</td>
                 <td>${papersCellHtml(job.recent_papers)}</td>
               </tr>`
           )
           .join("");
 
         return `
-          <table>
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Institution</th>
-                <th>Deadline</th>
-                <th>Location</th>
-                <th>Apply Via</th>
-                <th>Recent Papers</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>`;
+          <div class="results-card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Institution</th>
+                  <th>Deadline</th>
+                  <th>Location</th>
+                  <th>Apply Via</th>
+                  <th>Recent Papers</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
       }
 
       function csvField(value) {
@@ -207,7 +564,7 @@
       });
 
       async function performSearch(query, clarificationAnswer) {
-        statusEl.textContent = "Loading...";
+        statusEl.textContent = "Searching…";
         resultsEl.innerHTML = "";
         downloadButton.hidden = true;
         clarificationEl.hidden = true;
@@ -252,6 +609,13 @@
       clarificationForm.addEventListener("submit", (event) => {
         event.preventDefault();
         performSearch(pendingQuery, clarificationAnswerInput.value);
+      });
+
+      exampleChips.forEach((chip) => {
+        chip.addEventListener("click", () => {
+          queryInput.value = chip.dataset.query;
+          performSearch(chip.dataset.query, null);
+        });
       });
     </script>
   </body>

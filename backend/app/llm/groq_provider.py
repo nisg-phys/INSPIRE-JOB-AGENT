@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import groq
+import opik
 
 from app.llm.base import LLMProviderError
 
@@ -13,6 +14,7 @@ class GroqProvider:
     def __init__(self, api_key: str) -> None:
         self._client = groq.Groq(api_key=api_key)
 
+    @opik.track(type="llm", name="groq.complete_json")
     def complete_json(self, system: str, user: str) -> str:
         try:
             response = self._client.chat.completions.create(

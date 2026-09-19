@@ -14,6 +14,7 @@ dependencies = [
     "python-dotenv",
     "groq",
     "openai",
+    "opik",
 ]
 
 [tool.setuptools.packages.find]

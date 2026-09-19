@@ -15,6 +15,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
+import opik
+
 from app.llm.base import LLMProvider, LLMProviderError
 
 logger = logging.getLogger("app.llm.router")
@@ -46,6 +48,7 @@ class LLMRouter:
         self._cooldown_seconds = cooldown_seconds
         self._clock = clock
 
+    @opik.track(name="llm_router.complete_json")
     def complete_json(self, system: str, user: str) -> str:
         errors: list[str] = []
         now = self._clock()

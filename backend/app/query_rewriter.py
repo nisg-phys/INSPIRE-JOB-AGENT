@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 
+import opik
 from pydantic import BaseModel, ValidationError
 
 from app.config import get_settings
@@ -95,6 +96,7 @@ def _default_provider() -> LLMProvider:
     )
 
 
+@opik.track(name="analyze_query")
 def analyze_query(text: str, provider: LLMProvider | None = None) -> ParsedQuery:
     """Extract structured fields from a natural-language query, including
     whether it's too ambiguous to search well (see ParsedQuery.ambiguous).

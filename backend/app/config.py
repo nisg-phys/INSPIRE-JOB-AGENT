@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # provider, mainly useful for testing/debugging one in isolation.
     llm_provider: Literal["auto", "groq", "openai", "gemini"] = "auto"
 
+    # Opik (https://comet.com/opik) LLM call tracing. Optional - if unset,
+    # tracing is a no-op (see app/tracing.py) rather than an error, so this
+    # isn't required just to run the app.
+    opik_api_key: str | None = None
+    opik_workspace: str = "default"
+    opik_project_name: str = "inspire-jobs-agent"
+
 
 @lru_cache
 def get_settings() -> Settings:

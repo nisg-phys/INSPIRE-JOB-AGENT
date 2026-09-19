@@ -1,0 +1,55 @@
+name: Deploy backend to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch: {}
+
+env:
+  PROJECT_ID: pulsar-jobs-agent
+  REGION: us-central1
+  SERVICE: pulsar-backend
+  REPO: pulsar
+  RUNTIME_SA: pulsar-backend-runtime@pulsar-jobs-agent.iam.gserviceaccount.com
+
+permissions:
+  contents: read
+  id-token: write # required to mint the OIDC token for Workload Identity Federation
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/479115071793/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: pulsar-deployer@pulsar-jobs-agent.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/backend:${{ github.sha }}"
+          docker build -t "$IMAGE" -f backend/Dockerfile backend
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image="${{ env.IMAGE }}" \
+            --region="${{ env.REGION }}" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --service-account="${{ env.RUNTIME_SA }}" \
+            --set-secrets="DATABASE_URL=database-url:latest,GROQ_API_KEY=groq-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,OPIK_API_KEY=opik-api-key:latest" \
+            --set-env-vars="LLM_PROVIDER=auto,OPIK_WORKSPACE=agentic-ai,OPIK_PROJECT_NAME=inspire-jobs-agent"

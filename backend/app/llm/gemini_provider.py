@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import openai
+import opik
 
 from app.llm.base import LLMProviderError
 
@@ -15,6 +16,7 @@ class GeminiProvider:
     def __init__(self, api_key: str) -> None:
         self._client = openai.OpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
 
+    @opik.track(type="llm", name="gemini.complete_json")
     def complete_json(self, system: str, user: str) -> str:
         try:
             response = self._client.chat.completions.create(

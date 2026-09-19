@@ -14,11 +14,13 @@ from app.institution_papers import get_recent_papers, select_relevant_papers
 from app.jobs_log import log_jobs
 from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_params
+from app.tracing import setup_tracing
 
 # Fail loudly at import time (i.e. before uvicorn starts serving) if required
 # config is missing, rather than failing on the first request.
 get_settings()
 
+setup_tracing()
 setup_logging()
 logger = logging.getLogger("app.request")
 
