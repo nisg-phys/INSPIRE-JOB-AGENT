@@ -17,6 +17,10 @@ from pydantic import BaseModel, Field
 
 INSPIRE_BASE_URL = "https://inspirehep.net/api"
 
+# INSPIRE's controlled vocabulary for job rank (schemas/records/jobs.json).
+RANKS = ["STAFF", "SENIOR", "JUNIOR", "VISITOR", "POSTDOC", "PHD", "MASTER", "UNDERGRADUATE", "OTHER"]
+Rank = Literal["STAFF", "SENIOR", "JUNIOR", "VISITOR", "POSTDOC", "PHD", "MASTER", "UNDERGRADUATE", "OTHER"]
+
 
 class InspireAPIError(RuntimeError):
     """Raised when the INSPIRE-HEP API request fails."""
@@ -57,10 +61,16 @@ class RawJob(BaseModel):
 class JobQueryParams(BaseModel):
     """Structured search params accepted by the Inspire jobs client."""
 
-    keywords: str = Field(default="", description="Free-text query, e.g. 'postdoc string theory'.")
+    keywords: str = Field(default="", description="Free-text query, e.g. 'string theory'.")
     status: Literal["open", "closed"] = "open"
     sort: Literal["mostrecent", "deadline"] = "mostrecent"
     size: int = Field(default=10, gt=0, le=1000)
+    # Hard filter on INSPIRE's rank facet, NOT free text - Inspire's `q` is a
+    # relevance-scored search, so e.g. keywords="faculty cosmology" happily
+    # surfaces Master's/PhD postings that just mention "cosmology" strongly.
+    # Inspire's rank filter only accepts one value per request (no OR), so
+    # multiple ranks here mean multiple requests, merged - see search_jobs.
+    ranks: list[Rank] = Field(default_factory=list)
 
 
 def _request(endpoint: str, params: dict) -> dict:
@@ -79,18 +89,16 @@ def _request(endpoint: str, params: dict) -> dict:
         raise InspireAPIError("Could not connect to INSPIRE.") from exc
 
 
-def search_jobs(params: JobQueryParams) -> list[RawJob]:
-    """Search INSPIRE job postings.
-
-    Raises:
-        InspireAPIError: If the underlying request fails.
-    """
+def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> list[RawJob]:
     query_params = {
         "q": params.keywords,
         "size": params.size,
         "sort": params.sort,
         "status": params.status,
     }
+    if rank:
+        query_params["rank"] = rank
+
     data = _request("jobs", query_params)
     hits = data["hits"]["hits"]
 
@@ -117,3 +125,24 @@ def search_jobs(params: JobQueryParams) -> list[RawJob]:
             )
         )
     return jobs
+
+
+def search_jobs(params: JobQueryParams) -> list[RawJob]:
+    """Search INSPIRE job postings.
+
+    Raises:
+        InspireAPIError: If the underlying request fails.
+    """
+    if not params.ranks:
+        return _search_jobs_single(params, rank=None)
+
+    # INSPIRE's rank filter takes one value per request; fetch each
+    # requested rank separately and merge, deduped by record_id.
+    seen_ids: set[str] = set()
+    jobs: list[RawJob] = []
+    for rank in params.ranks:
+        for job in _search_jobs_single(params, rank=rank):
+            if job.record_id not in seen_ids:
+                seen_ids.add(job.record_id)
+                jobs.append(job)
+    return jobs[: params.size]

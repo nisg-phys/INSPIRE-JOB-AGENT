@@ -14,22 +14,33 @@ from functools import lru_cache
 from pydantic import BaseModel, ValidationError
 
 from app.config import get_settings
-from app.inspire_client import JobQueryParams
+from app.inspire_client import RANKS, JobQueryParams
 from app.llm.base import LLMProvider, LLMProviderError
 from app.llm.gemini_provider import GeminiProvider
 from app.llm.groq_provider import GroqProvider
 from app.llm.openai_provider import OpenAIProvider
 from app.llm.router import LLMRouter
 
-SYSTEM_PROMPT = """You extract structured search parameters from a natural-language query for physics/astronomy academic job postings.
+SYSTEM_PROMPT = f"""You extract structured search parameters from a natural-language query for physics/astronomy academic job postings.
 
 Respond with JSON only, matching this shape:
-{"subfield": string or null, "seniority": string or null, "location": string or null, "keywords": [string, ...], "ambiguous": bool, "clarification_question": string or null}
+{{"subfield": string or null, "seniority": string or null, "location": string or null, "keywords": [string, ...], "ranks": [string, ...], "ambiguous": bool, "clarification_question": string or null}}
 
 - subfield: the physics/research subfield mentioned (e.g. "string theory", "cosmology", "condensed matter"). null if none.
-- seniority: the career stage/rank mentioned (e.g. "postdoc", "faculty", "phd student", "research scientist"). null if none.
+- seniority: a short human-readable description of the career stage/rank mentioned (e.g. "postdoc", "faculty", "phd student"). null if none. This is just for display - ranks (below) is what actually filters the search.
 - location: a country, region, or institution mentioned (e.g. "UK", "Europe", "Germany"). null if none.
 - keywords: any other meaningful search terms not already captured above (e.g. specific techniques, grant names). Empty list if none.
+- ranks: the INSPIRE job-rank codes implied by the query, chosen ONLY from this exact set: {", ".join(RANKS)}. Map generously but precisely:
+  * "faculty" / "professor" / "tenure-track" with no further detail -> ["JUNIOR", "SENIOR"] (covers assistant through full professor)
+  * "assistant professor" specifically -> ["JUNIOR"]
+  * "associate professor" / "full professor" / "tenured" -> ["SENIOR"]
+  * "postdoc" / "postdoctoral" -> ["POSTDOC"]
+  * "phd student" / "doctoral" / "graduate student" -> ["PHD"]
+  * "master's student" / "msc" -> ["MASTER"]
+  * "undergraduate" / "summer student" -> ["UNDERGRADUATE"]
+  * "staff scientist" / "research scientist" / "permanent position" -> ["STAFF"]
+  * "visiting researcher" / "sabbatical" -> ["VISITOR"]
+  * no seniority mentioned at all -> [] (do not guess)
 - ambiguous: true only if the query is so vague that a search would likely return an unhelpfully broad or unclear set of results, AND asking one clarifying question would meaningfully narrow it down. A query that is deliberately broad (e.g. "any physics jobs", "show me everything open") is NOT ambiguous - the user has made a clear choice to see everything. A query naming just a subfield, or just a seniority level, is usually specific enough on its own and NOT ambiguous. Reserve true for queries with essentially no usable signal (e.g. a single vague word, or a request that could mean many unrelated things).
 - clarification_question: if ambiguous is true, one short, specific question to ask the user to narrow the search. null if ambiguous is false.
 
@@ -45,6 +56,7 @@ class ParsedQuery(BaseModel):
     seniority: str | None = None
     location: str | None = None
     keywords: list[str] = []
+    ranks: list[str] = []
     ambiguous: bool = False
     clarification_question: str | None = None
 
@@ -92,9 +104,15 @@ def to_job_query_params(parsed: ParsedQuery) -> JobQueryParams:
     (e.g. main.py, after calling analyze_query to check ambiguity) don't
     need a second LLM call just to get JobQueryParams.
     """
-    terms = [parsed.seniority, parsed.subfield, parsed.location, *parsed.keywords]
+    # seniority is NOT included here - it goes through the structured ranks
+    # filter below instead. Inspire's `q` is relevance-scored free text, not
+    # an exact-match filter, so a term like "faculty" in keywords doesn't
+    # exclude Master's/PhD postings that just happen to score well on the
+    # other terms - the ranks filter does.
+    terms = [parsed.subfield, parsed.location, *parsed.keywords]
     keywords = " ".join(dict.fromkeys(term.strip() for term in terms if term and term.strip()))
-    return JobQueryParams(keywords=keywords)
+    ranks = [rank for rank in dict.fromkeys(parsed.ranks) if rank in RANKS]
+    return JobQueryParams(keywords=keywords, ranks=ranks)
 
 
 def rewrite_query(text: str, provider: LLMProvider | None = None) -> JobQueryParams:
