@@ -20,7 +20,25 @@ permissions:
   id-token: write # required to mint the OIDC token for Workload Identity Federation
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend with dev dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest -v
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
