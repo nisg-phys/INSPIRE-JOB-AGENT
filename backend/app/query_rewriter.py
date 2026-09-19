@@ -16,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 from app.config import get_settings
 from app.inspire_client import JobQueryParams
 from app.llm.base import LLMProvider, LLMProviderError
+from app.llm.gemini_provider import GeminiProvider
 from app.llm.groq_provider import GroqProvider
 from app.llm.openai_provider import OpenAIProvider
 
@@ -48,6 +49,8 @@ def _default_provider() -> LLMProvider:
     settings = get_settings()
     if settings.llm_provider == "openai":
         return OpenAIProvider(api_key=settings.openai_api_key)
+    if settings.llm_provider == "gemini":
+        return GeminiProvider(api_key=settings.gemini_api_key)
     return GroqProvider(api_key=settings.groq_api_key)
 
 
