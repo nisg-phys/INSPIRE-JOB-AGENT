@@ -50,6 +50,7 @@
     </form>
 
     <div id="status"></div>
+    <button id="download-csv" type="button" hidden>Download CSV</button>
     <div id="results"></div>
 
     <script>
@@ -60,6 +61,9 @@
       const queryInput = document.getElementById("query");
       const statusEl = document.getElementById("status");
       const resultsEl = document.getElementById("results");
+      const downloadButton = document.getElementById("download-csv");
+
+      let lastResults = [];
 
       function escapeHtml(value) {
         const div = document.createElement("div");
@@ -130,10 +134,57 @@
           </table>`;
       }
 
+      function csvField(value) {
+        // Always quote, and double up any embedded quotes - simplest way to
+        // stay correct for fields that may contain commas, quotes, or
+        // newlines (paper titles pulled from Inspire can have any of these).
+        return `"${String(value ?? "").replace(/"/g, '""')}"`;
+      }
+
+      function papersToCsvField(papers) {
+        if (!papers || papers.length === 0) return "";
+        return papers.map((p) => `${p.title} (${p.citation_count} citations)`).join("; ");
+      }
+
+      function buildCsv(jobs) {
+        const header = ["Title", "Institution", "Deadline", "Location", "Tags", "Recent Papers", "Link"];
+        const lines = [header.map(csvField).join(",")];
+        for (const job of jobs) {
+          lines.push(
+            [
+              job.title,
+              job.institution,
+              job.deadline ?? "",
+              job.location ?? "",
+              (job.tags || []).join(", "),
+              papersToCsvField(job.recent_papers),
+              job.link ?? "",
+            ]
+              .map(csvField)
+              .join(",")
+          );
+        }
+        // CRLF is the CSV-spec line ending and what Excel expects.
+        return lines.join("\r\n");
+      }
+
+      downloadButton.addEventListener("click", () => {
+        if (lastResults.length === 0) return;
+        const blob = new Blob([buildCsv(lastResults)], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "inspire-jobs.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         statusEl.textContent = "Loading...";
         resultsEl.innerHTML = "";
+        downloadButton.hidden = true;
+        lastResults = [];
 
         try {
           const response = await fetch(`${API_BASE_URL}/jobs/search`, {
@@ -148,6 +199,9 @@
             statusEl.textContent = data.clarification_question;
             return;
           }
+
+          lastResults = data.results;
+          downloadButton.hidden = lastResults.length === 0;
 
           statusEl.textContent = data.cached
             ? `${data.results.length} result(s) (cached)`
