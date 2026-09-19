@@ -45,7 +45,7 @@
       }
 
       .hero-inner {
-        max-width: 900px;
+        max-width: 1200px;
         margin: 0 auto;
       }
 
@@ -97,7 +97,7 @@
       }
 
       main {
-        max-width: 900px;
+        max-width: 1200px;
         margin: -2.6rem auto 3rem;
         padding: 0 1.5rem;
       }
@@ -252,12 +252,14 @@
         border: 1px solid var(--border);
         border-radius: var(--radius);
         box-shadow: var(--shadow);
-        overflow: hidden;
+        overflow-x: auto;
       }
 
       table {
         border-collapse: collapse;
         width: 100%;
+        min-width: 720px;
+        table-layout: fixed;
       }
 
       th,
@@ -267,6 +269,35 @@
         vertical-align: top;
         font-size: 0.92rem;
         border-bottom: 1px solid var(--border);
+        overflow-wrap: break-word;
+      }
+
+      /* table-layout: fixed needs explicit widths, otherwise columns split
+         evenly - Recent Papers (longest content) needs far more room than
+         Deadline/Location/Apply Via (short, fixed-ish text). */
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 20%;
+      }
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: 13%;
+      }
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 8%;
+      }
+      th:nth-child(4),
+      td:nth-child(4) {
+        width: 8%;
+      }
+      th:nth-child(5),
+      td:nth-child(5) {
+        width: 13%;
+      }
+      th:nth-child(6),
+      td:nth-child(6) {
+        width: 38%;
       }
 
       th {
@@ -276,6 +307,22 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.04em;
+      }
+
+      thead th:first-child {
+        border-top-left-radius: var(--radius);
+      }
+
+      thead th:last-child {
+        border-top-right-radius: var(--radius);
+      }
+
+      tbody tr:last-child td:first-child {
+        border-bottom-left-radius: var(--radius);
+      }
+
+      tbody tr:last-child td:last-child {
+        border-bottom-right-radius: var(--radius);
       }
 
       tbody tr:last-child td {
@@ -299,6 +346,8 @@
       td ul {
         margin: 0;
         padding-left: 1.1rem;
+        max-height: 8.5rem;
+        overflow-y: auto;
       }
 
       td li {
