@@ -24,12 +24,14 @@ from app.llm.router import LLMRouter
 SYSTEM_PROMPT = """You extract structured search parameters from a natural-language query for physics/astronomy academic job postings.
 
 Respond with JSON only, matching this shape:
-{"subfield": string or null, "seniority": string or null, "location": string or null, "keywords": [string, ...]}
+{"subfield": string or null, "seniority": string or null, "location": string or null, "keywords": [string, ...], "ambiguous": bool, "clarification_question": string or null}
 
 - subfield: the physics/research subfield mentioned (e.g. "string theory", "cosmology", "condensed matter"). null if none.
 - seniority: the career stage/rank mentioned (e.g. "postdoc", "faculty", "phd student", "research scientist"). null if none.
 - location: a country, region, or institution mentioned (e.g. "UK", "Europe", "Germany"). null if none.
 - keywords: any other meaningful search terms not already captured above (e.g. specific techniques, grant names). Empty list if none.
+- ambiguous: true only if the query is so vague that a search would likely return an unhelpfully broad or unclear set of results, AND asking one clarifying question would meaningfully narrow it down. A query that is deliberately broad (e.g. "any physics jobs", "show me everything open") is NOT ambiguous - the user has made a clear choice to see everything. A query naming just a subfield, or just a seniority level, is usually specific enough on its own and NOT ambiguous. Reserve true for queries with essentially no usable signal (e.g. a single vague word, or a request that could mean many unrelated things).
+- clarification_question: if ambiguous is true, one short, specific question to ask the user to narrow the search. null if ambiguous is false.
 
 Do not invent information that isn't in the query."""
 
@@ -43,6 +45,8 @@ class ParsedQuery(BaseModel):
     seniority: str | None = None
     location: str | None = None
     keywords: list[str] = []
+    ambiguous: bool = False
+    clarification_question: str | None = None
 
 
 @lru_cache
@@ -65,9 +69,13 @@ def _default_provider() -> LLMProvider:
     )
 
 
-def _extract(text: str, provider: LLMProvider) -> ParsedQuery:
+def analyze_query(text: str, provider: LLMProvider | None = None) -> ParsedQuery:
+    """Extract structured fields from a natural-language query, including
+    whether it's too ambiguous to search well (see ParsedQuery.ambiguous).
+    """
+    chosen_provider = provider or _default_provider()
     try:
-        raw = provider.complete_json(SYSTEM_PROMPT, text)
+        raw = chosen_provider.complete_json(SYSTEM_PROMPT, text)
     except LLMProviderError as exc:
         raise QueryRewriteError(str(exc)) from exc
 
@@ -79,7 +87,7 @@ def _extract(text: str, provider: LLMProvider) -> ParsedQuery:
 
 def rewrite_query(text: str, provider: LLMProvider | None = None) -> JobQueryParams:
     """Turn a natural-language query into structured Inspire search params."""
-    parsed = _extract(text, provider or _default_provider())
+    parsed = analyze_query(text, provider)
     terms = [parsed.seniority, parsed.subfield, parsed.location, *parsed.keywords]
     keywords = " ".join(dict.fromkeys(term.strip() for term in terms if term and term.strip()))
     return JobQueryParams(keywords=keywords)
