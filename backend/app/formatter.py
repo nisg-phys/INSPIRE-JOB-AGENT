@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from app.inspire_client import RawJob
+from app.institution_papers import Paper
 
 
 class FormattedJob(BaseModel):
@@ -15,6 +16,9 @@ class FormattedJob(BaseModel):
     location: str | None = None
     link: str | None = None
     tags: list[str] = Field(default_factory=list)
+    # Populated after formatting, from institution_papers (T4.5) - empty
+    # until the worker has enriched at least one of this job's institutions.
+    recent_papers: list[Paper] = Field(default_factory=list)
 
 
 def _format_job(job: RawJob) -> FormattedJob:
