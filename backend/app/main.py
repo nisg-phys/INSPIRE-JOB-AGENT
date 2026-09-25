@@ -10,8 +10,7 @@ from app import cache
 from app.config import get_settings
 from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
-from app.inspire_literature_client import InspireAPIError as LiteratureAPIError
-from app.institution_papers import fetch_and_store, get_recent_papers, select_relevant_papers
+from app.institution_papers import fetch_and_store_many, get_recent_papers, select_relevant_papers
 from app.jobs_log import log_jobs
 from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_params
@@ -27,10 +26,10 @@ logger = logging.getLogger("app.request")
 
 # Bounds how many never-before-seen institutions a single search request
 # will fetch live from Inspire's literature API (see the on-demand fallback
-# in the search endpoint below) - each is an extra ~1s+ HTTP call, so this
-# caps the worst case added latency rather than letting one broad query
-# block on an unbounded number of them.
-MAX_ON_DEMAND_ENRICH = 5
+# in the search endpoint below). They're fetched concurrently, so this is a
+# cap on total work and INSPIRE load more than on latency: one search page is
+# 10 jobs, so 10 covers essentially every query, in ~two waves of 5.
+MAX_ON_DEMAND_ENRICH = 10
 
 app = FastAPI(title="Inspire Jobs Agent")
 
@@ -175,32 +174,30 @@ def _search(request: SearchRequest) -> SearchResponse:
 
     # On-demand fallback: fetch live for institutions still missing, rather
     # than making a never-before-seen institution wait for the next worker
-    # run. Capped so one broad query naming many new institutions can't
-    # balloon this request's latency - anything past the cap just stays
-    # "not yet available" until the worker's next pass.
+    # run. Fetched concurrently (see fetch_and_store_many) and capped so one
+    # broad query naming many new institutions can't balloon this request's
+    # latency - anything past the cap just stays "not yet available" until
+    # the worker's next pass.
     missing = [name for name in institutions if name not in papers_by_institution]
     institution_ids = {name: rid for job in jobs for name, rid in job.institution_ids.items()}
-    on_demand_fetched = 0
-    on_demand_failed = 0
-    for institution in missing[:MAX_ON_DEMAND_ENRICH]:
-        try:
-            papers_by_institution[institution] = fetch_and_store(
-                institution, institution_ids.get(institution)
-            )
-            on_demand_fetched += 1
-        except LiteratureAPIError as exc:
-            on_demand_failed += 1
-            logger.warning(
-                "on_demand_enrichment_failed", extra={"institution": institution, "error": str(exc)}
-            )
+    on_demand_start = time.monotonic()
+    fetched, failures = fetch_and_store_many(
+        {name: institution_ids.get(name) for name in missing[:MAX_ON_DEMAND_ENRICH]}
+    )
+    papers_by_institution.update(fetched)
+    for institution, error in failures.items():
+        logger.warning(
+            "on_demand_enrichment_failed", extra={"institution": institution, "error": error}
+        )
 
     logger.info(
         "institution_enrichment",
         extra={
             "institutions_seen": len(institutions),
             "institutions_enriched": len(papers_by_institution),
-            "on_demand_fetched": on_demand_fetched,
-            "on_demand_failed": on_demand_failed,
+            "on_demand_fetched": len(fetched),
+            "on_demand_failed": len(failures),
+            "on_demand_duration_ms": round((time.monotonic() - on_demand_start) * 1000, 1),
         },
     )
     for raw_job, formatted_job in zip(jobs, result):

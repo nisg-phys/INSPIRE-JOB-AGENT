@@ -8,11 +8,19 @@ never-before-seen institution doesn't have to wait for the next worker run.
 
 from __future__ import annotations
 
+import contextvars
+from concurrent.futures import ThreadPoolExecutor
+
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db import get_engine
-from app.inspire_literature_client import recent_papers
+from app.inspire_literature_client import InspireAPIError, recent_papers
+
+# How many institutions fetch_and_store_many fetches at once. Bounded (not
+# "one thread per institution") to stay polite to INSPIRE's rate limit, which
+# a burst from a shared Cloud Run egress IP could otherwise trip.
+MAX_PARALLEL_FETCHES = 5
 
 
 class Paper(BaseModel):
@@ -79,6 +87,46 @@ def fetch_and_store(institution: str, institution_id: str | None = None) -> list
             {"institution": institution, "institution_id": institution_id, "papers": payload},
         )
     return papers
+
+
+def fetch_and_store_many(
+    institutions: dict[str, str | None],
+) -> tuple[dict[str, list[Paper]], dict[str, str]]:
+    """fetch_and_store for several institutions at once (name -> id or None).
+
+    The fetches are independent network calls, so running them concurrently
+    makes a search with N never-seen institutions cost roughly one fetch
+    (~2-3s) instead of N in a row. Returns (papers by institution, error
+    message by institution): an INSPIRE failure for one institution lands in
+    the second dict rather than aborting the others. Any other exception
+    (e.g. a database error) still propagates, as it would sequentially.
+    """
+    if not institutions:
+        return {}, {}
+
+    def fetch_one(name: str, institution_id: str | None) -> list[Paper] | str:
+        try:
+            return fetch_and_store(name, institution_id)
+        except InspireAPIError as exc:
+            return str(exc)
+
+    papers: dict[str, list[Paper]] = {}
+    errors: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_FETCHES, len(institutions))) as pool:
+        # Each task runs in a copy of this request's context, so anything it
+        # logs still carries the request_id (worker threads don't inherit
+        # ContextVars on their own).
+        futures = {
+            name: pool.submit(contextvars.copy_context().run, fetch_one, name, institution_id)
+            for name, institution_id in institutions.items()
+        }
+        for name, future in futures.items():
+            result = future.result()
+            if isinstance(result, str):
+                errors[name] = result
+            else:
+                papers[name] = result
+    return papers, errors
 
 
 def get_recent_papers(institutions: list[str]) -> dict[str, list[Paper]]:
