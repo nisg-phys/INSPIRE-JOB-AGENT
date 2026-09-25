@@ -1,4 +1,6 @@
-from app.query_rewriter import ParsedQuery, to_job_query_params
+import pytest
+
+from app.query_rewriter import ParsedQuery, mentions_career_stage, to_job_query_params
 
 
 def test_ranks_pass_through_as_structured_filter_not_keywords():
@@ -83,3 +85,31 @@ def test_keywords_are_flattened_to_a_single_line():
     params = to_job_query_params(ParsedQuery(subfield="string\n\ntheory", location="  UK  "))
 
     assert params.keywords == "string theory UK"
+
+
+# --- the cache must not answer a query that should ask for a stage -----
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["string theory", "string thoery", "cosmology", "lattice QCD", "dark matter positions",
+     "jobs in condensed matter", "quantum gravity"],
+)
+def test_bare_subfield_queries_may_not_be_answered_from_cache(query):
+    """These embed very close to "postdoc in <subfield>", so allowing a
+    cache hit would silently serve one career stage's results instead of
+    asking which stage the user wants.
+    """
+    assert mentions_career_stage(query) is False
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["postdoc in string theory", "post docs in string thoery", "PhD positions in Europe",
+     "faculty jobs in cosmology", "assistant professor astrophysics", "postdoc jobs",
+     "research scientist in instrumentation", "summer internship in astrophysics",
+     "any string theory jobs", "string theory positions at all career levels",
+     "show me everything open"],
+)
+def test_queries_that_settle_the_stage_may_use_the_cache(query):
+    assert mentions_career_stage(query) is True

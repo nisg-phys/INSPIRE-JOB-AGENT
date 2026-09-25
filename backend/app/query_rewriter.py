@@ -9,6 +9,7 @@ answers it.
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 
 import opik
@@ -77,6 +78,35 @@ Do not invent information that isn't in the query."""
 
 
 MAX_KEYWORD_CHARS = 200
+
+# Words that show a query has already settled the career stage - either by
+# naming one, or by asking for everything. Spelling variants and common
+# misspellings are included because this runs before the LLM sees the query.
+_CAREER_STAGE_TERMS = [
+    r"post[\s-]?docs?", r"post[\s-]?doctoral", r"ph\.?\s?d", r"doctoral", r"doctorate",
+    r"grad(uate)?\s+student", r"masters?", r"m\.?sc", r"undergrad(uate)?", r"intern(ship)?",
+    r"summer\s+student", r"faculty", r"professor", r"prof", r"lecturer", r"tenure[\s-]?track",
+    r"tenured", r"assistant", r"associate", r"senior", r"junior", r"staff", r"scientist",
+    r"fellow(ship)?", r"visit(ing|or)", r"sabbatical",
+    # "asked for everything" counts as settled: the prompt maps these to no
+    # rank filter rather than to a clarifying question.
+    r"any", r"all", r"every(thing)?",
+]
+_CAREER_STAGE_RE = re.compile(r"\b(" + "|".join(_CAREER_STAGE_TERMS) + r")\b", re.IGNORECASE)
+
+
+def mentions_career_stage(text: str) -> bool:
+    """Whether a raw query already settles which career stage is wanted.
+
+    A deterministic pre-check, used to decide whether the semantic cache may
+    answer at all. Embeddings put "string theory" and "postdoc in string
+    theory" close together - they differ in one short phrase - so without
+    this the cache happily answers a bare subfield query with a previous
+    postdoc search's results, and the clarification question never gets
+    asked. Erring towards False only costs an LLM call, which an ambiguous
+    query needs anyway to produce its question.
+    """
+    return bool(_CAREER_STAGE_RE.search(text))
 
 
 class QueryRewriteError(RuntimeError):

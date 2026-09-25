@@ -70,6 +70,19 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   it is a model judgement, not a rule: it has no deterministic backstop, and
   the boundary for adjacent fields (applied maths, scientific computing) is
   set by prompt wording alone.
+- **The semantic cache can still cross career stages.** A query with no
+  career stage now skips the cache entirely (`mentions_career_stage` in
+  `backend/app/query_rewriter.py`), which stops a bare "string theory" being
+  answered with a cached postdoc search instead of a clarifying question.
+  Two queries that each *do* name a stage are still compared by embedding
+  alone, and those embeddings barely register the difference: "phd in string
+  theory" scores 0.77 against a cached "postdoc in string theory", just under
+  the 0.8 threshold. Nothing guarantees a similar pair stays below it. The
+  robust fix is to make the stage part of the cache key rather than trusting
+  the embedding to encode it - the parsed `ranks` are already stored on each
+  entry, they just aren't compared. The pre-check is also a keyword list, so
+  an unusual phrasing ("W2 position", "chargé de recherche") reads as no
+  stage and quietly skips the cache.
 - **No per-client rate limiting.** Nothing stops one caller from spending the
   shared Tavily credits or the LLM providers' free-tier quotas for everyone.
   A refused off-topic query is cheap (one LLM call, no web search), but it is

@@ -13,7 +13,12 @@ from app.inspire_client import InspireAPIError, search_jobs
 from app.institution_papers import fetch_and_store_many, get_recent_papers, select_relevant_papers
 from app.jobs_log import log_jobs
 from app.logging_config import request_id_var, setup_logging
-from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_params
+from app.query_rewriter import (
+    QueryRewriteError,
+    analyze_query,
+    mentions_career_stage,
+    to_job_query_params,
+)
 from app.tracing import setup_tracing
 from app.web_jobs import fallback_results, is_enabled, should_fall_back
 
@@ -131,16 +136,29 @@ def _search(request: SearchRequest) -> SearchResponse:
     if request.clarification_answer:
         effective_query = f"{request.query} ({request.clarification_answer})"
 
-    cache_start = time.monotonic()
-    cached = cache.lookup(effective_query)
-    logger.info(
-        "cache_lookup",
-        extra={
-            "hit": cached is not None,
-            "similarity": cached.similarity if cached else None,
-            "duration_ms": round((time.monotonic() - cache_start) * 1000, 1),
-        },
-    )
+    # A query that hasn't said which career stage it wants must not be
+    # answered from cache. "string theory" and "postdoc in string theory"
+    # embed very close together - they differ by one short phrase - so the
+    # cache would serve the postdoc search's results and the clarification
+    # question would never be asked. Skipping the lookup costs nothing
+    # here: such a query needs the LLM anyway to produce its question.
+    may_use_cache = mentions_career_stage(effective_query)
+
+    cached = None
+    if may_use_cache:
+        cache_start = time.monotonic()
+        cached = cache.lookup(effective_query)
+        logger.info(
+            "cache_lookup",
+            extra={
+                "hit": cached is not None,
+                "similarity": cached.similarity if cached else None,
+                "duration_ms": round((time.monotonic() - cache_start) * 1000, 1),
+            },
+        )
+    else:
+        logger.info("cache_lookup", extra={"hit": False, "skipped": "no_career_stage"})
+
     if cached is not None:
         return SearchResponse(cached=True, results=cached.result)
 
