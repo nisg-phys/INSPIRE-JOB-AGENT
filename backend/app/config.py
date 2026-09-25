@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     opik_workspace: str = "default"
     opik_project_name: str = "inspire-jobs-agent"
 
+    # Tavily (https://tavily.com) web search, used only as a fallback for
+    # queries Inspire has no postings for (see app/web_jobs.py). Optional -
+    # if unset the fallback is skipped and a zero-result search just stays
+    # empty, exactly as it did before the fallback existed.
+    tavily_api_key: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

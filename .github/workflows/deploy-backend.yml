@@ -69,5 +69,5 @@ jobs:
             --platform=managed \
             --allow-unauthenticated \
             --service-account="${{ env.RUNTIME_SA }}" \
-            --set-secrets="DATABASE_URL=database-url:latest,GROQ_API_KEY=groq-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,OPIK_API_KEY=opik-api-key:latest" \
+            --set-secrets="DATABASE_URL=database-url:latest,GROQ_API_KEY=groq-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,OPIK_API_KEY=opik-api-key:latest,TAVILY_API_KEY=tavily-api-key:latest" \
             --set-env-vars="LLM_PROVIDER=auto,OPIK_WORKSPACE=agentic-ai,OPIK_PROJECT_NAME=inspire-jobs-agent"

@@ -20,12 +20,19 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
 
 ## Future scope
 
-- **Web crawler for job boards beyond Inspire-HEP.** Currently the only source
-  of job postings is Inspire-HEP's own jobs API. Many relevant postings (e.g.
-  university HR portals, AcademicJobsOnline listings not mirrored on Inspire)
-  never show up. A crawler that ingests additional job boards, normalizes
-  them into the same `RawJob`/`FormattedJob` shape, and feeds them through
-  the same query/cache/enrichment path would meaningfully widen coverage.
+- **Job sources beyond Inspire-HEP (partly done).** Inspire-HEP's jobs API is
+  still the primary source, and postings on university HR portals or job
+  boards that never reach Inspire used to be invisible. A web-search fallback
+  now covers the worst of that gap: when a search returns zero Inspire jobs,
+  `backend/app/web_jobs.py` searches the web via Tavily, has the LLM verify
+  each hit is a genuine, matching job posting, and renders the survivors in
+  the same table marked "Web result". What remains: web rows are found live
+  per query, never ingested, so they aren't deduped against Inspire postings,
+  aren't available for paper enrichment (their institution names aren't
+  Inspire's canonical spellings), and can't be refreshed on a schedule. A
+  real crawler that ingests boards into `jobs_raw` would fix all three - note
+  it would need its own institution-name normalization first, since
+  `worker/worker/discovery.py` would otherwise chase those names forever.
 - **Paper enrichment for free-text institutions (partly fixed).** Papers are
   now fetched by Inspire's institution record id (`affid <id>`) whenever the
   job posting links one (~95% of open postings), which fixes the original

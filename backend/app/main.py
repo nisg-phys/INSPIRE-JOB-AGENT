@@ -15,6 +15,7 @@ from app.jobs_log import log_jobs
 from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import QueryRewriteError, analyze_query, to_job_query_params
 from app.tracing import setup_tracing
+from app.web_jobs import fallback_results, is_enabled, should_fall_back
 
 # Fail loudly at import time (i.e. before uvicorn starts serving) if required
 # config is missing, rather than failing on the first request.
@@ -91,6 +92,9 @@ class SearchResponse(BaseModel):
     results: list[FormattedJob] = Field(default_factory=list)
     needs_clarification: bool = False
     clarification_question: str | None = None
+    # True when Inspire had nothing and the web fallback ran, so the UI can
+    # say "we looked on the web too" rather than just "no results".
+    web_searched: bool = False
 
 
 @app.post("/jobs/search", response_model=SearchResponse)
@@ -212,8 +216,35 @@ def _search(request: SearchRequest) -> SearchResponse:
         # showing the institution's most recent output overall.
         formatted_job.recent_papers = select_relevant_papers(candidate_papers, parsed.categories)
 
-    cache.store(effective_query, params, result)
-    return SearchResponse(cached=False, results=result)
+    # Web fallback: Inspire is curated and many groups never post to it, so
+    # a narrow query can come back empty while the position exists on a
+    # university page. Runs only when Inspire found nothing - see
+    # web_jobs.should_fall_back for why not on thin-but-nonempty results.
+    # Placed after the loop above: it extends `result`, which zip() pairs
+    # positionally against `jobs`.
+    fallback_error = None
+    web_searched = False
+    if should_fall_back(len(jobs)) and is_enabled():
+        web_searched = True
+        web_start = time.monotonic()
+        web_jobs, fallback_error = fallback_results(parsed)
+        result.extend(web_jobs)
+        logger.info(
+            "web_fallback",
+            extra={
+                "kept_count": len(web_jobs),
+                "duration_ms": round((time.monotonic() - web_start) * 1000, 1),
+            },
+        )
+        if fallback_error:
+            logger.warning("web_fallback_failed", extra={"error": fallback_error})
+
+    # Don't cache an empty result the fallback failed to fill: a transient
+    # Tavily or LLM outage would otherwise be frozen in as "no results" for
+    # the full 24h TTL.
+    if result or not fallback_error:
+        cache.store(effective_query, params, result)
+    return SearchResponse(cached=False, results=result, web_searched=web_searched)
 
 
 def main() -> None:

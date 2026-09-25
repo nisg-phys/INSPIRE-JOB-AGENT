@@ -1,4 +1,4 @@
-from app.formatter import _apply_via, _format_job
+from app.formatter import FormattedJob, _apply_via, _format_job
 from app.inspire_client import ContactDetail, RawJob
 
 
@@ -61,3 +61,20 @@ def test_format_job_defaults_missing_position_and_institution():
 
     assert formatted.title == "Unknown position"
     assert formatted.institution == "Unknown institution"
+
+
+def test_inspire_jobs_are_labelled_as_such():
+    job = _format_job(RawJob(record_id="1", position="Postdoc"))
+
+    assert job.source == "inspire"
+
+
+def test_a_cached_row_without_a_source_still_validates():
+    """cache.py round-trips FormattedJob through JSONB, so rows written
+    before `source` existed must still load - i.e. it must stay optional.
+    """
+    job = FormattedJob.model_validate(
+        {"record_id": "1", "title": "Postdoc", "institution": "CERN"}
+    )
+
+    assert job.source == "inspire"

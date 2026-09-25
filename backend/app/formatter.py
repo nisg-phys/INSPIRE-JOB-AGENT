@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
@@ -29,6 +30,14 @@ class FormattedJob(BaseModel):
     link: str | None = None
     apply_via: str = "See posting"
     tags: list[str] = Field(default_factory=list)
+    # Where this row came from. Defaults to "inspire" so rows cached by an
+    # older build (cache.py round-trips this model through JSONB) still
+    # validate on lookup - a required field here would invalidate every
+    # pre-existing query_cache row.
+    source: Literal["inspire", "web"] = "inspire"
+    # Qualifies a web row when it isn't a direct subfield match (e.g.
+    # "broader field"). None for Inspire rows and for direct matches.
+    match_note: str | None = None
     # Populated after formatting, from institution_papers (T4.5) - empty
     # until the worker has enriched at least one of this job's institutions.
     recent_papers: list[Paper] = Field(default_factory=list)
