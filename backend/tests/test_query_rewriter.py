@@ -113,3 +113,10 @@ def test_bare_subfield_queries_may_not_be_answered_from_cache(query):
 )
 def test_queries_that_settle_the_stage_may_use_the_cache(query):
     assert mentions_career_stage(query) is True
+
+
+def test_defaults_sort_by_deadline_not_recency():
+    """With no pagination, what closes soonest is what matters."""
+    params = to_job_query_params(ParsedQuery(subfield="cosmology", on_topic=True))
+
+    assert params.sort == "deadline"

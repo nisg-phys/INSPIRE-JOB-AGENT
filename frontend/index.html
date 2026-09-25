@@ -723,9 +723,17 @@
 
           const webCount = data.results.filter((job) => job.source === "web").length;
           const webNote = webCount ? `, ${webCount} from the web` : "";
+          const shown = data.results.length;
+          // Say when there are more matches than fit on the page: results
+          // are ordered by nearest deadline and there's no way to page on,
+          // so silently showing the first 25 of 120 would mislead.
+          const countText =
+            data.total_matches && data.total_matches > shown
+              ? `Showing ${shown} of ${data.total_matches}, soonest deadline first`
+              : `${shown} result(s)`;
           statusEl.textContent = data.cached
-            ? `${data.results.length} result(s) (cached)${webNote}`
-            : `${data.results.length} result(s)${webNote}`;
+            ? `${countText} (cached)${webNote}`
+            : `${countText}${webNote}`;
           resultsEl.innerHTML = renderTable(data.results, data.web_searched);
         } catch (err) {
           statusEl.textContent = `Error: ${err}`;

@@ -8,14 +8,21 @@ app's naming.
 
 from __future__ import annotations
 
+import contextvars
 import html
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, Optional
 
 import requests
 from pydantic import BaseModel, Field
 
 INSPIRE_BASE_URL = "https://inspirehep.net/api"
+
+# Upper bound for the ids-only counting request: Inspire has ~207 open jobs
+# in total, so this covers any single rank with room to spare.
+MAX_COUNT_RECORDS = 500
+MAX_PARALLEL_RANK_FETCHES = 4
 
 # INSPIRE's controlled vocabulary for job rank (schemas/records/jobs.json).
 RANKS = ["STAFF", "SENIOR", "JUNIOR", "VISITOR", "POSTDOC", "PHD", "MASTER", "UNDERGRADUATE", "OTHER"]
@@ -64,13 +71,25 @@ class RawJob(BaseModel):
     contact_details: list[ContactDetail] = Field(default_factory=list)
 
 
+class JobSearchResult(BaseModel):
+    """A page of jobs plus how many matched, so the UI can say what's hidden."""
+
+    jobs: list[RawJob] = Field(default_factory=list)
+    total: int = 0
+
+
 class JobQueryParams(BaseModel):
     """Structured search params accepted by the Inspire jobs client."""
 
     keywords: str = Field(default="", description="Free-text query, e.g. 'string theory'.")
     status: Literal["open", "closed"] = "open"
-    sort: Literal["mostrecent", "deadline"] = "mostrecent"
-    size: int = Field(default=10, gt=0, le=1000)
+    # Soonest deadline first: someone searching for a job needs to know what
+    # closes next, and there's no pagination to reach anything further down.
+    sort: Literal["mostrecent", "deadline"] = "deadline"
+    # Deadlines cluster hard - 24 of the ~207 currently-open jobs share one
+    # date, and a broad postdoc search has 15 on one. A page of 10 would cut
+    # through the middle of such a group with no way to see the rest.
+    size: int = Field(default=25, gt=0, le=1000)
     # Hard filter on INSPIRE's rank facet, NOT free text - Inspire's `q` is a
     # relevance-scored search, so e.g. keywords="faculty cosmology" happily
     # surfaces Master's/PhD postings that just mention "cosmology" strongly.
@@ -109,7 +128,8 @@ def _institution_ids(institutions: list[dict]) -> dict[str, str]:
     return ids
 
 
-def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> list[RawJob]:
+def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> tuple[list[RawJob], int]:
+    """One Inspire request. Returns its jobs and how many matched in total."""
     query_params = {
         "q": params.keywords,
         "size": params.size,
@@ -121,6 +141,7 @@ def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> list[RawJo
 
     data = _request("jobs", query_params)
     hits = data["hits"]["hits"]
+    total = data["hits"].get("total", len(hits))
 
     jobs = []
     for hit in hits:
@@ -145,25 +166,90 @@ def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> list[RawJo
                 contact_details=contacts,
             )
         )
-    return jobs
+    return jobs, total
 
 
-def search_jobs(params: JobQueryParams) -> list[RawJob]:
+def _matching_record_ids(params: JobQueryParams, rank: Rank) -> set[str]:
+    """Every matching record id for one rank, ids only.
+
+    Used to count a multi-rank search exactly. Summing the per-rank totals
+    would overcount badly - 22 of the 55 open JUNIOR-or-SENIOR jobs are
+    listed under both ranks, so a "faculty" search would claim 77 - and
+    asking for just the ids is cheap (~26KB for all 120 open postdocs,
+    against ~120KB for a single page of 25 full records).
+    """
+    data = _request(
+        "jobs",
+        {
+            "q": params.keywords,
+            "size": MAX_COUNT_RECORDS,
+            "status": params.status,
+            "rank": rank,
+            "fields": "control_number",
+        },
+    )
+    return {
+        str(hit["metadata"]["control_number"])
+        for hit in data["hits"]["hits"]
+        if hit.get("metadata", {}).get("control_number")
+    }
+
+
+def _deadline_key(job: RawJob) -> tuple[int, str]:
+    # Undated postings sort last rather than first: an absent deadline isn't
+    # an urgent one. Every currently-open Inspire job has a date, so this
+    # only guards the edge case.
+    return (1, "") if not job.deadline else (0, job.deadline)
+
+
+def search_jobs(params: JobQueryParams) -> JobSearchResult:
     """Search INSPIRE job postings.
 
     Raises:
         InspireAPIError: If the underlying request fails.
     """
     if not params.ranks:
-        return _search_jobs_single(params, rank=None)
+        jobs, total = _search_jobs_single(params, rank=None)
+        return JobSearchResult(jobs=jobs[: params.size], total=total)
 
-    # INSPIRE's rank filter takes one value per request; fetch each
-    # requested rank separately and merge, deduped by record_id.
+    if len(params.ranks) == 1:
+        jobs, total = _search_jobs_single(params, rank=params.ranks[0])
+        return JobSearchResult(jobs=jobs[: params.size], total=total)
+
+    # Inspire's rank filter takes one value per request, so a multi-rank
+    # query fans out. Requests run together: a "faculty" search is four
+    # round trips (two of jobs, two of ids) and sequentially they'd stack up
+    # on the user's critical path.
+    def fetch(rank: Rank) -> tuple[list[RawJob], set[str]]:
+        jobs, _ = _search_jobs_single(params, rank=rank)
+        return jobs, _matching_record_ids(params, rank)
+
+    with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_RANK_FETCHES, len(params.ranks))) as pool:
+        # A fresh context copy per task: one Context can't be entered by two
+        # threads at once. Copying carries this request's id into the worker
+        # threads so their logs stay attributable.
+        futures = [
+            pool.submit(contextvars.copy_context().run, fetch, rank) for rank in params.ranks
+        ]
+        fetched = [future.result() for future in futures]
+
     seen_ids: set[str] = set()
     jobs: list[RawJob] = []
-    for rank in params.ranks:
-        for job in _search_jobs_single(params, rank=rank):
+    all_ids: set[str] = set()
+    for rank_jobs, rank_ids in fetched:
+        all_ids |= rank_ids
+        for job in rank_jobs:
             if job.record_id not in seen_ids:
                 seen_ids.add(job.record_id)
                 jobs.append(job)
-    return jobs[: params.size]
+
+    # Re-sort before truncating. Each rank's page arrives in its own order,
+    # so concatenating them and cutting at `size` handed every slot to the
+    # first rank: a JUNIOR+SENIOR search filled all 10 rows with JUNIOR and
+    # hid six SENIOR jobs closing sooner, one of them within the week.
+    # Taking `size` from each rank first guarantees the true earliest
+    # `size` are among the merged candidates.
+    if params.sort == "deadline":
+        jobs.sort(key=_deadline_key)
+
+    return JobSearchResult(jobs=jobs[: params.size], total=len(all_ids))

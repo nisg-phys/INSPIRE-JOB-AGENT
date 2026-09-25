@@ -10,7 +10,12 @@ from app import cache
 from app.config import get_settings
 from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
-from app.institution_papers import fetch_and_store_many, get_recent_papers, select_relevant_papers
+from app.institution_papers import (
+    MAX_PARALLEL_FETCHES,
+    fetch_and_store_many,
+    get_recent_papers,
+    select_relevant_papers,
+)
 from app.jobs_log import log_jobs
 from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import (
@@ -32,10 +37,12 @@ logger = logging.getLogger("app.request")
 
 # Bounds how many never-before-seen institutions a single search request
 # will fetch live from Inspire's literature API (see the on-demand fallback
-# in the search endpoint below). They're fetched concurrently, so this is a
-# cap on total work and INSPIRE load more than on latency: one search page is
-# 10 jobs, so 10 covers essentially every query, in ~two waves of 5.
-MAX_ON_DEMAND_ENRICH = 10
+# in the search endpoint below). Kept equal to institution_papers'
+# MAX_PARALLEL_FETCHES so they run as a single wave: a 25-job page spans
+# ~20 institutions, and at 10 the second wave was adding ~8s to a first
+# visit. Institutions past the cap get their papers from the worker's next
+# daily run, and from later searches, which each enrich a few more.
+MAX_ON_DEMAND_ENRICH = MAX_PARALLEL_FETCHES
 
 OFF_TOPIC_NOTICE = (
     "Pulsar only searches academic research job postings in physics, astronomy and "
@@ -110,6 +117,10 @@ class SearchResponse(BaseModel):
     # Distinct from "no results": nothing was searched at all.
     off_topic: bool = False
     notice: str | None = None
+    # How many jobs matched on Inspire, which is usually more than the page
+    # returned. None when unknown (a web-fallback result, or a cache entry
+    # written before this was recorded).
+    total_matches: int | None = None
 
 
 @app.post("/jobs/search", response_model=SearchResponse)
@@ -160,7 +171,9 @@ def _search(request: SearchRequest) -> SearchResponse:
         logger.info("cache_lookup", extra={"hit": False, "skipped": "no_career_stage"})
 
     if cached is not None:
-        return SearchResponse(cached=True, results=cached.result)
+        return SearchResponse(
+            cached=True, results=cached.result, total_matches=cached.total_matches
+        )
 
     try:
         if request.clarification_answer:
@@ -193,12 +206,15 @@ def _search(request: SearchRequest) -> SearchResponse:
 
     try:
         inspire_start = time.monotonic()
-        jobs = search_jobs(params)
+        search_result = search_jobs(params)
+        jobs = search_result.jobs
+        total_matches = search_result.total
         logger.info(
             "inspire_search",
             extra={
                 "keywords": params.keywords,
                 "job_count": len(jobs),
+                "total_matches": total_matches,
                 "duration_ms": round((time.monotonic() - inspire_start) * 1000, 1),
             },
         )
@@ -281,9 +297,18 @@ def _search(request: SearchRequest) -> SearchResponse:
     # Don't cache an empty result the fallback failed to fill: a transient
     # Tavily or LLM outage would otherwise be frozen in as "no results" for
     # the full 24h TTL.
+    # Web rows aren't drawn from a counted result set, so the Inspire total
+    # would misdescribe the page actually shown.
+    reported_total = None if web_searched else total_matches
+
     if result or not fallback_error:
-        cache.store(effective_query, params, result)
-    return SearchResponse(cached=False, results=result, web_searched=web_searched)
+        cache.store(effective_query, params, result, reported_total)
+    return SearchResponse(
+        cached=False,
+        results=result,
+        web_searched=web_searched,
+        total_matches=reported_total,
+    )
 
 
 def main() -> None:

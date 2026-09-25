@@ -8,6 +8,7 @@ search endpoint in T3.3).
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel
@@ -30,6 +31,7 @@ class CacheEntry(BaseModel):
     query_text: str
     params: JobQueryParams
     result: list[FormattedJob]
+    total_matches: int | None = None
     created_at: datetime
     similarity: float
 
@@ -64,19 +66,37 @@ def lookup(
     if row is None or row["similarity"] < threshold:
         return None
 
+    # Entries used to be stored as a bare JSON array of jobs. The envelope
+    # below adds the match count beside them, so accept both shapes rather
+    # than invalidating every entry written before that.
+    payload = row["result"]
+    if isinstance(payload, list):
+        items, total = payload, None
+    else:
+        items, total = payload.get("jobs", []), payload.get("total")
+
     return CacheEntry(
         id=row["id"],
         query_text=row["query_text"],
         params=JobQueryParams.model_validate(row["params"]),
-        result=[FormattedJob.model_validate(item) for item in row["result"]],
+        result=[FormattedJob.model_validate(item) for item in items],
+        total_matches=total,
         created_at=row["created_at"],
         similarity=row["similarity"],
     )
 
 
-def store(query_text: str, params: JobQueryParams, result: list[FormattedJob]) -> None:
+def store(
+    query_text: str,
+    params: JobQueryParams,
+    result: list[FormattedJob],
+    total_matches: int | None = None,
+) -> None:
     """Insert a new cache entry."""
     vector = _vector_literal(embed(query_text))
+    payload = json.dumps(
+        {"jobs": [json.loads(item.model_dump_json()) for item in result], "total": total_matches}
+    )
 
     with get_engine().begin() as conn:
         conn.execute(
@@ -95,6 +115,6 @@ def store(query_text: str, params: JobQueryParams, result: list[FormattedJob]) -
                 "query_text": query_text,
                 "vector": vector,
                 "params": params.model_dump_json(),
-                "result": "[" + ",".join(item.model_dump_json() for item in result) + "]",
+                "result": payload,
             },
         )
