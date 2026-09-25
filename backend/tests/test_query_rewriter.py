@@ -59,3 +59,27 @@ def test_empty_query_produces_empty_params():
 
     assert params.keywords == ""
     assert params.ranks == []
+
+
+def test_off_topic_is_the_default_so_unreadable_output_is_not_searched():
+    """Fails closed: a response missing the flag means output we couldn't
+    read, and answering anyway is what the flag exists to prevent.
+    """
+    assert ParsedQuery().on_topic is False
+
+
+def test_runaway_keywords_are_capped():
+    """The keyword string is model output shaped by user text. A real query
+    is a few words; a huge one means a bad parse or leaked injected text.
+    """
+    from app.query_rewriter import MAX_KEYWORD_CHARS
+
+    params = to_job_query_params(ParsedQuery(subfield="x" * 500, keywords=["y" * 500]))
+
+    assert len(params.keywords) <= MAX_KEYWORD_CHARS
+
+
+def test_keywords_are_flattened_to_a_single_line():
+    params = to_job_query_params(ParsedQuery(subfield="string\n\ntheory", location="  UK  "))
+
+    assert params.keywords == "string theory UK"

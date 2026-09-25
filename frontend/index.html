@@ -710,6 +710,17 @@
           lastResults = data.results;
           downloadButton.hidden = lastResults.length === 0;
 
+          // Refused, not searched: show why instead of an empty table,
+          // which would read as "nothing out there matches".
+          if (data.off_topic) {
+            pendingQuery = null;
+            statusEl.textContent = "";
+            resultsEl.innerHTML = `<div class="results-card"><div class="empty-state">${escapeHtml(
+              data.notice || "Pulsar only searches physics and astronomy job postings."
+            )}</div></div>`;
+            return;
+          }
+
           const webCount = data.results.filter((job) => job.source === "web").length;
           const webNote = webCount ? `, ${webCount} from the web` : "";
           statusEl.textContent = data.cached

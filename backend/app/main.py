@@ -32,6 +32,12 @@ logger = logging.getLogger("app.request")
 # 10 jobs, so 10 covers essentially every query, in ~two waves of 5.
 MAX_ON_DEMAND_ENRICH = 10
 
+OFF_TOPIC_NOTICE = (
+    "Pulsar only searches academic research job postings in physics, astronomy and "
+    "related fields. Try naming a subfield and a career stage, for example "
+    "\"postdoc in cosmology\"."
+)
+
 app = FastAPI(title="Inspire Jobs Agent")
 
 # The deployed frontend (T8.4) is served from the same Firebase Hosting
@@ -95,6 +101,10 @@ class SearchResponse(BaseModel):
     # True when Inspire had nothing and the web fallback ran, so the UI can
     # say "we looked on the web too" rather than just "no results".
     web_searched: bool = False
+    # Set when the query isn't a search for academic research positions.
+    # Distinct from "no results": nothing was searched at all.
+    off_topic: bool = False
+    notice: str | None = None
 
 
 @app.post("/jobs/search", response_model=SearchResponse)
@@ -141,6 +151,17 @@ def _search(request: SearchRequest) -> SearchResponse:
             parsed = analyze_query(effective_query)
         else:
             parsed = analyze_query(request.query)
+
+        # Checked before anything is searched, and on both turns: Pulsar
+        # answers job searches, and the web fallback below would otherwise
+        # turn any other question into a general web search. Not cached -
+        # a rejection isn't a result set, and storing it as one would serve
+        # a bare "0 results" to the next matching query.
+        if not parsed.on_topic:
+            logger.info("query_rejected_off_topic")
+            return SearchResponse(off_topic=True, notice=OFF_TOPIC_NOTICE)
+
+        if not request.clarification_answer:
             logger.info("ambiguity_check", extra={"ambiguous": parsed.ambiguous})
             if parsed.ambiguous:
                 return SearchResponse(
