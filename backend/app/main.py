@@ -300,14 +300,23 @@ def _search(request: SearchRequest) -> SearchResponse:
         if fallback_error:
             logger.warning("web_fallback_failed", extra={"error": fallback_error})
 
-    # Don't cache an empty result the fallback failed to fill: a transient
-    # Tavily or LLM outage would otherwise be frozen in as "no results" for
-    # the full 24h TTL.
     # Web rows aren't drawn from a counted result set, so the Inspire total
     # would misdescribe the page actually shown.
     reported_total = None if web_searched else total_matches
 
-    if result or not fallback_error:
+    # An empty result is the least stable thing to remember, so it's only
+    # cached when the web fallback ran cleanly and found nothing too - that
+    # is a real "nothing anywhere", and repeating it would spend a Tavily
+    # credit each time. Any other empty result is skipped:
+    #  - the fallback errored: a transient Tavily or LLM outage would be
+    #    frozen in as "no results" for the full 24h TTL;
+    #  - the fallback didn't run (no key, or it wasn't deployed yet): the
+    #    empty answer is only true of *this* build. A query answered empty
+    #    two minutes before the fallback shipped was served that empty
+    #    answer for a day, and never reached the code that would have
+    #    found the posting.
+    cacheable = bool(result) or (web_searched and not fallback_error)
+    if cacheable:
         cache.store(effective_query, params, result, reported_total)
     return SearchResponse(
         cached=False,
