@@ -42,8 +42,19 @@ def _request(endpoint: str, params: dict) -> dict:
         raise InspireAPIError("Could not connect to INSPIRE.") from exc
 
 
-def recent_papers(institution: str, size: int = 20) -> list[Paper]:
-    params = {"q": f'aff "{institution}"', "size": size, "sort": "mostrecent"}
+def _affiliation_query(institution: str, institution_id: str | None) -> str:
+    # Prefer the institution's record id: it matches every spelling of the
+    # affiliation ("Kentucky U." and "U. Kentucky" alike). The exact-phrase
+    # name search is only the fallback for free-text postings with no linked
+    # institution record, and misses whenever the posting's spelling differs
+    # from the papers' (e.g. `aff "U. Kentucky"` -> 0 hits vs 2,000+ by id).
+    if institution_id:
+        return f"affid {institution_id}"
+    return f'aff "{institution}"'
+
+
+def recent_papers(institution: str, institution_id: str | None = None, size: int = 20) -> list[Paper]:
+    params = {"q": _affiliation_query(institution, institution_id), "size": size, "sort": "mostrecent"}
     data = _request("literature", params)
     hits = data["hits"]["hits"]
 

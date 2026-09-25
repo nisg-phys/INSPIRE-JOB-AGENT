@@ -7,31 +7,35 @@ import sys
 from sqlalchemy import text
 
 from worker.db import get_engine
+from worker.discovery import InstitutionRef
 from worker.inspire_literature_client import InspireAPIError, recent_papers
 
 
-def enrich_institution(institution: str) -> None:
-    papers = recent_papers(institution)
+def enrich_institution(ref: InstitutionRef) -> None:
+    papers = recent_papers(ref.name, ref.institution_id)
     payload = "[" + ",".join(paper.model_dump_json() for paper in papers) + "]"
 
     with get_engine().begin() as conn:
         conn.execute(
             text(
                 """
-                INSERT INTO institution_papers (institution, papers, last_updated)
-                VALUES (:institution, CAST(:papers AS jsonb), now())
+                INSERT INTO institution_papers (institution, institution_id, papers, last_updated)
+                VALUES (:institution, :institution_id, CAST(:papers AS jsonb), now())
                 ON CONFLICT (institution) DO UPDATE
-                SET papers = EXCLUDED.papers, last_updated = EXCLUDED.last_updated
+                SET papers = EXCLUDED.papers,
+                    institution_id = EXCLUDED.institution_id,
+                    last_updated = EXCLUDED.last_updated
                 """
             ),
-            {"institution": institution, "papers": payload},
+            {"institution": ref.name, "institution_id": ref.institution_id, "papers": payload},
         )
 
 
-def enrich(institutions: list[str]) -> None:
-    for institution in institutions:
+def enrich(institutions: list[InstitutionRef]) -> None:
+    for ref in institutions:
         try:
-            enrich_institution(institution)
-            print(f"worker: enriched {institution!r}")
+            enrich_institution(ref)
+            how = f"by id {ref.institution_id}" if ref.institution_id else "by name"
+            print(f"worker: enriched {ref.name!r} ({how})")
         except InspireAPIError as exc:
-            print(f"worker: failed to enrich {institution!r}: {exc}", file=sys.stderr)
+            print(f"worker: failed to enrich {ref.name!r}: {exc}", file=sys.stderr)

@@ -65,3 +65,69 @@ def test_multi_rank_results_respect_size_cap(monkeypatch):
     result = search_jobs(JobQueryParams(keywords="x", ranks=["JUNIOR", "SENIOR"], size=3))
 
     assert len(result) == 3
+
+
+def _hit(institutions: list[dict]) -> dict:
+    return {
+        "metadata": {
+            "control_number": 1,
+            "position": "Postdoc",
+            "institutions": institutions,
+        }
+    }
+
+
+def test_institution_ids_are_extracted_from_record_refs(monkeypatch):
+    """Regression test for the U. Kentucky zero-papers bug: the same
+    institution is spelled differently across postings, so the linked
+    record id (not the name) is what paper enrichment needs to search by.
+    """
+    payload = {
+        "hits": {
+            "hits": [
+                _hit(
+                    [
+                        {
+                            "value": "Kentucky U.",
+                            "record": {"$ref": "https://labs.inspirehep.net/api/institutions/904048"},
+                        },
+                        {
+                            "value": "Fermilab",
+                            "record": {"$ref": "https://labs.inspirehep.net/api/institutions/902796"},
+                        },
+                    ]
+                )
+            ]
+        }
+    }
+    monkeypatch.setattr("app.inspire_client._request", lambda endpoint, params: payload)
+
+    [job] = search_jobs(JobQueryParams(keywords="x"))
+
+    assert job.institution_ids == {"Kentucky U.": "904048", "Fermilab": "902796"}
+
+
+def test_unlinked_institution_has_no_id(monkeypatch):
+    """Free-text institutions (no record ref) must simply be absent from
+    institution_ids, so enrichment falls back to name search for them."""
+    payload = {
+        "hits": {
+            "hits": [
+                _hit(
+                    [
+                        {"value": "Wolfram Institute, Champaign"},
+                        {
+                            "value": "Kentucky U.",
+                            "record": {"$ref": "https://labs.inspirehep.net/api/institutions/904048"},
+                        },
+                    ]
+                )
+            ]
+        }
+    }
+    monkeypatch.setattr("app.inspire_client._request", lambda endpoint, params: payload)
+
+    [job] = search_jobs(JobQueryParams(keywords="x"))
+
+    assert job.institutions == ["Wolfram Institute, Champaign", "Kentucky U."]
+    assert job.institution_ids == {"Kentucky U.": "904048"}

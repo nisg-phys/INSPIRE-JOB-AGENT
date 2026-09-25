@@ -179,11 +179,14 @@ def _search(request: SearchRequest) -> SearchResponse:
     # balloon this request's latency - anything past the cap just stays
     # "not yet available" until the worker's next pass.
     missing = [name for name in institutions if name not in papers_by_institution]
+    institution_ids = {name: rid for job in jobs for name, rid in job.institution_ids.items()}
     on_demand_fetched = 0
     on_demand_failed = 0
     for institution in missing[:MAX_ON_DEMAND_ENRICH]:
         try:
-            papers_by_institution[institution] = fetch_and_store(institution)
+            papers_by_institution[institution] = fetch_and_store(
+                institution, institution_ids.get(institution)
+            )
             on_demand_fetched += 1
         except LiteratureAPIError as exc:
             on_demand_failed += 1

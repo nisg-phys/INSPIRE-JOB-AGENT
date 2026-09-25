@@ -47,6 +47,12 @@ class RawJob(BaseModel):
     record_id: str
     position: str
     institutions: list[str] = Field(default_factory=list)
+    # Institution name -> INSPIRE institution record id, for the entries that
+    # are linked to an institution record (~95% of open postings). The name
+    # string alone is unreliable as a search key: the same institution shows
+    # up as "Kentucky U." on one posting and "U. Kentucky" on another, and
+    # only one of those matches a paper's affiliation string.
+    institution_ids: dict[str, str] = Field(default_factory=dict)
     ranks: list[str] = Field(default_factory=list)
     regions: list[str] = Field(default_factory=list)
     deadline: Optional[str] = Field(default=None, description="ISO date, if listed.")
@@ -89,6 +95,20 @@ def _request(endpoint: str, params: dict) -> dict:
         raise InspireAPIError("Could not connect to INSPIRE.") from exc
 
 
+def _institution_ids(institutions: list[dict]) -> dict[str, str]:
+    """Map institution name -> record id, from each entry's record.$ref URL
+    (e.g. ".../api/institutions/904048"). Free-text entries with no linked
+    record are simply absent from the result.
+    """
+    ids: dict[str, str] = {}
+    for inst in institutions:
+        name = inst.get("value", "")
+        match = re.search(r"/institutions/(\d+)", inst.get("record", {}).get("$ref", ""))
+        if name and match:
+            ids[name] = match.group(1)
+    return ids
+
+
 def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> list[RawJob]:
     query_params = {
         "q": params.keywords,
@@ -115,6 +135,7 @@ def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> list[RawJo
                 record_id=str(metadata.get("control_number", "")),
                 position=metadata.get("position", "Unknown position"),
                 institutions=[inst.get("value", "") for inst in metadata.get("institutions", [])],
+                institution_ids=_institution_ids(metadata.get("institutions", [])),
                 ranks=metadata.get("ranks", []),
                 regions=metadata.get("regions", []),
                 deadline=metadata.get("deadline_date"),

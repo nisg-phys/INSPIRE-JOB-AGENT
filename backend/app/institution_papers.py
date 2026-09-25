@@ -42,7 +42,7 @@ def select_relevant_papers(
     return papers[:limit]
 
 
-def fetch_and_store(institution: str) -> list[Paper]:
+def fetch_and_store(institution: str, institution_id: str | None = None) -> list[Paper]:
     """On-demand fallback for an institution the worker hasn't enriched yet.
 
     The worker's daily cron (worker/worker/enrichment.py) is still the
@@ -59,20 +59,24 @@ def fetch_and_store(institution: str) -> list[Paper]:
     # recent_papers returns inspire_literature_client.Paper - structurally
     # identical to this module's Paper, but re-validate into the local type
     # so callers get one consistent Paper class regardless of source.
-    papers = [Paper.model_validate(p.model_dump()) for p in recent_papers(institution)]
+    papers = [
+        Paper.model_validate(p.model_dump()) for p in recent_papers(institution, institution_id)
+    ]
     payload = "[" + ",".join(paper.model_dump_json() for paper in papers) + "]"
 
     with get_engine().begin() as conn:
         conn.execute(
             text(
                 """
-                INSERT INTO institution_papers (institution, papers, last_updated)
-                VALUES (:institution, CAST(:papers AS jsonb), now())
+                INSERT INTO institution_papers (institution, institution_id, papers, last_updated)
+                VALUES (:institution, :institution_id, CAST(:papers AS jsonb), now())
                 ON CONFLICT (institution) DO UPDATE
-                SET papers = EXCLUDED.papers, last_updated = EXCLUDED.last_updated
+                SET papers = EXCLUDED.papers,
+                    institution_id = EXCLUDED.institution_id,
+                    last_updated = EXCLUDED.last_updated
                 """
             ),
-            {"institution": institution, "papers": payload},
+            {"institution": institution, "institution_id": institution_id, "papers": payload},
         )
     return papers
 
