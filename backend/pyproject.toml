@@ -10,6 +10,10 @@ dependencies = [
     "psycopg[binary]",
     "pgvector",
     "requests",
+    # Imported directly by inspire_literature_client, and needed by
+    # fastapi.testclient. It only arrived transitively via openai/groq
+    # before, so a change in their dependencies would have broken us.
+    "httpx",
     "alembic",
     "python-dotenv",
     "groq",

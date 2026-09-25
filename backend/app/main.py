@@ -12,13 +12,15 @@ from app.formatter import FormattedJob, format_jobs
 from app.inspire_client import InspireAPIError, search_jobs
 from app.institution_papers import (
     MAX_PARALLEL_FETCHES,
+    Paper,
     fetch_and_store_many,
     get_recent_papers,
     select_relevant_papers,
 )
-from app.jobs_log import log_jobs
+from app.jobs_log import known_institutions, log_jobs
 from app.logging_config import request_id_var, setup_logging
 from app.query_rewriter import (
+    INSPIRE_CATEGORIES,
     QueryRewriteError,
     analyze_query,
     mentions_career_stage,
@@ -43,6 +45,11 @@ logger = logging.getLogger("app.request")
 # visit. Institutions past the cap get their papers from the worker's next
 # daily run, and from later searches, which each enrich a few more.
 MAX_ON_DEMAND_ENRICH = MAX_PARALLEL_FETCHES
+
+# Upper bound on how many institution names one deferred-papers request may
+# name. A 25-job page spans ~20 institutions; this leaves headroom without
+# letting a caller hand us an unbounded list.
+MAX_DEFERRED_INSTITUTIONS = 40
 
 OFF_TOPIC_NOTICE = (
     "Pulsar only searches academic research job postings in physics, astronomy and "
@@ -121,6 +128,9 @@ class SearchResponse(BaseModel):
     # returned. None when unknown (a web-fallback result, or a cache entry
     # written before this was recorded).
     total_matches: int | None = None
+    # The query's subfield categories, echoed back so the deferred papers
+    # request can rank papers by the same relevance the inline path uses.
+    paper_categories: list[str] = Field(default_factory=list)
 
 
 @app.post("/jobs/search", response_model=SearchResponse)
@@ -176,12 +186,21 @@ def _search(request: SearchRequest) -> SearchResponse:
         )
 
     try:
+        rewrite_start = time.monotonic()
         if request.clarification_answer:
             # Second turn: the user already resolved the ambiguity, so run
             # the search directly rather than re-checking ambiguous.
             parsed = analyze_query(effective_query)
         else:
             parsed = analyze_query(request.query)
+        # Timed because this is the one step big enough to dominate a slow
+        # response, and without it the gap between the logged steps and the
+        # request total has to be guessed at. A provider failing over to the
+        # next in the chain shows up here as several seconds.
+        logger.info(
+            "query_rewrite",
+            extra={"duration_ms": round((time.monotonic() - rewrite_start) * 1000, 1)},
+        )
 
         # Checked before anything is searched, and on both turns: Pulsar
         # answers job searches, and the web fallback below would otherwise
@@ -231,32 +250,19 @@ def _search(request: SearchRequest) -> SearchResponse:
     institutions = sorted({name for job in jobs for name in job.institutions})
     papers_by_institution = get_recent_papers(institutions)
 
-    # On-demand fallback: fetch live for institutions still missing, rather
-    # than making a never-before-seen institution wait for the next worker
-    # run. Fetched concurrently (see fetch_and_store_many) and capped so one
-    # broad query naming many new institutions can't balloon this request's
-    # latency - anything past the cap just stays "not yet available" until
-    # the worker's next pass.
-    missing = [name for name in institutions if name not in papers_by_institution]
-    institution_ids = {name: rid for job in jobs for name, rid in job.institution_ids.items()}
-    on_demand_start = time.monotonic()
-    fetched, failures = fetch_and_store_many(
-        {name: institution_ids.get(name) for name in missing[:MAX_ON_DEMAND_ENRICH]}
-    )
-    papers_by_institution.update(fetched)
-    for institution, error in failures.items():
-        logger.warning(
-            "on_demand_enrichment_failed", extra={"institution": institution, "error": error}
-        )
-
+    # Institutions with nothing stored yet are deliberately NOT fetched here.
+    # That live Inspire literature call was 6-16s of a cold response, dwarfing
+    # the ~1s search itself, and it blocked jobs the user could already have
+    # been reading. The frontend asks for those separately (see
+    # /institutions/papers) and fills the cells in when they arrive.
     logger.info(
         "institution_enrichment",
         extra={
             "institutions_seen": len(institutions),
-            "institutions_enriched": len(papers_by_institution),
-            "on_demand_fetched": len(fetched),
-            "on_demand_failed": len(failures),
-            "on_demand_duration_ms": round((time.monotonic() - on_demand_start) * 1000, 1),
+            "institutions_from_store": len(papers_by_institution),
+            "institutions_deferred": len(
+                [name for name in institutions if name not in papers_by_institution]
+            ),
         },
     )
     for raw_job, formatted_job in zip(jobs, result):
@@ -308,6 +314,70 @@ def _search(request: SearchRequest) -> SearchResponse:
         results=result,
         web_searched=web_searched,
         total_matches=reported_total,
+        paper_categories=parsed.categories,
+    )
+
+
+class PapersRequest(BaseModel):
+    institutions: list[str] = Field(default_factory=list)
+    # The search's categories, so deferred papers are ranked by the same
+    # subfield relevance as the ones that came back with the jobs.
+    categories: list[str] = Field(default_factory=list)
+
+
+class PapersResponse(BaseModel):
+    papers: dict[str, list[Paper]] = Field(default_factory=dict)
+
+
+@app.post("/institutions/papers", response_model=PapersResponse)
+def institution_papers(request: PapersRequest) -> PapersResponse:
+    """Papers for institutions a search didn't already have them for.
+
+    Split out of the search path because it's the slow half: reading stored
+    papers is a few milliseconds, but fetching a never-seen institution's
+    from Inspire took 6-16s and held up jobs the user could already read.
+    Failure is not an error here - the cells simply stay as they were.
+    """
+    names = [name.strip() for name in request.institutions if name and name.strip()]
+    if not names:
+        return PapersResponse()
+
+    # The names arrive from the client and end up inside an Inspire query,
+    # so they're resolved against institutions actually logged from a real
+    # posting. Anything else is dropped rather than searched for.
+    resolved = known_institutions(sorted(set(names))[:MAX_DEFERRED_INSTITUTIONS])
+    if not resolved:
+        logger.info("deferred_papers", extra={"requested": len(names), "recognised": 0})
+        return PapersResponse()
+
+    stored = get_recent_papers(list(resolved))
+    missing = {name: rid for name, rid in resolved.items() if name not in stored}
+
+    fetch_start = time.monotonic()
+    fetched, failures = fetch_and_store_many(dict(list(missing.items())[:MAX_ON_DEMAND_ENRICH]))
+    for institution, error in failures.items():
+        logger.warning(
+            "deferred_enrichment_failed", extra={"institution": institution, "error": error}
+        )
+
+    logger.info(
+        "deferred_papers",
+        extra={
+            "requested": len(names),
+            "recognised": len(resolved),
+            "from_store": len(stored),
+            "fetched": len(fetched),
+            "failed": len(failures),
+            "duration_ms": round((time.monotonic() - fetch_start) * 1000, 1),
+        },
+    )
+
+    categories = [c for c in request.categories if c in INSPIRE_CATEGORIES]
+    combined = {**stored, **fetched}
+    return PapersResponse(
+        papers={
+            name: select_relevant_papers(papers, categories) for name, papers in combined.items()
+        }
     )
 
 

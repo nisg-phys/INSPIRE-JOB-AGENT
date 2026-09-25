@@ -583,7 +583,11 @@
           return '<span class="muted">—</span>';
         }
         if (!papers || papers.length === 0) {
-          return '<span class="muted">Not yet available</span>';
+          // Jobs are rendered before papers are fetched, so an empty cell
+          // is "still loading" until that request comes back.
+          return job.papersResolved
+            ? '<span class="muted">Not yet available</span>'
+            : '<span class="muted">Loading…</span>';
         }
         const items = papers
           .map((p) => {
@@ -735,9 +739,65 @@
             ? `${countText} (cached)${webNote}`
             : `${countText}${webNote}`;
           resultsEl.innerHTML = renderTable(data.results, data.web_searched);
+          loadPapers(data.results, data.paper_categories || []);
         } catch (err) {
           statusEl.textContent = `Error: ${err}`;
         }
+      }
+
+      // Papers arrive after the table. Fetching a never-seen institution's
+      // from Inspire took 6-16s, which used to be spent before any job was
+      // shown; the jobs are the answer, the papers are extra context.
+      async function loadPapers(jobs, categories) {
+        const inspireJobs = jobs.filter((job) => job.source !== "web");
+        const pending = [
+          ...new Set(
+            inspireJobs
+              .filter((job) => !job.recent_papers || job.recent_papers.length === 0)
+              .flatMap((job) => String(job.institution || "").split("; "))
+              .map((name) => name.trim())
+              .filter((name) => name && name !== "Unknown institution")
+          ),
+        ];
+        if (pending.length === 0) return;
+
+        let papers = {};
+        try {
+          const response = await fetch(`${API_BASE_URL}/institutions/papers`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ institutions: pending, categories }),
+          });
+          if (!response.ok) throw new Error(response.status);
+          papers = (await response.json()).papers || {};
+        } catch (err) {
+          // Papers are supplementary: leave the cells as they are rather
+          // than turning a successful search into a visible error.
+          papers = {};
+        }
+
+        // Ignore a response that arrives after the user has searched again.
+        if (lastResults !== jobs) return;
+
+        for (const job of jobs) {
+          const wasEmpty = !job.recent_papers || job.recent_papers.length === 0;
+          job.papersResolved = true;
+          // Only fill the cells that were waiting. Rows that already had
+          // papers aren't in the request, so their institutions are absent
+          // from the response and rewriting them would blank them out.
+          if (job.source === "web" || !wasEmpty) continue;
+          const seen = new Set();
+          job.recent_papers = String(job.institution || "")
+            .split("; ")
+            .flatMap((name) => papers[name.trim()] || [])
+            .filter((paper) => {
+              if (seen.has(paper.record_id)) return false;
+              seen.add(paper.record_id);
+              return true;
+            })
+            .slice(0, 5);
+        }
+        resultsEl.innerHTML = renderTable(jobs, false);
       }
 
       form.addEventListener("submit", (event) => {
