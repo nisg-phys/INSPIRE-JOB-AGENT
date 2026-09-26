@@ -1,0 +1,1303 @@
+{
+  "uid": "pulsar-overview",
+  "title": "Pulsar backend",
+  "tags": [
+    "pulsar"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Traffic",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Searches",
+      "description": "Completed POST /jobs/search calls in the selected range.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_requests",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/jobs/search"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Paper lookups",
+      "description": "Completed POST /institutions/papers calls (the deferred second request).",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_requests",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/institutions/papers"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Server errors (5xx)",
+      "description": "Requests answered with a 5xx status.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_requests",
+              "AND",
+              "metric.label.status_code",
+              "=~",
+              "5.."
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Off-topic refusals",
+      "description": "Queries refused as not being an academic job search.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_events",
+              "AND",
+              "metric.label.event",
+              "=",
+              "query_rejected_off_topic"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Web fallback runs",
+      "description": "Searches where Inspire had nothing and the Tavily web fallback ran (each costs a credit).",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_events",
+              "AND",
+              "metric.label.event",
+              "=",
+              "web_fallback"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Web fallback failures",
+      "description": "Web fallback runs that errored.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_events",
+              "AND",
+              "metric.label.event",
+              "=",
+              "web_fallback_failed"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Requests by endpoint",
+      "description": "Only /jobs/search and /institutions/papers are counted.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "{{metric.label.path}}",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_requests"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [
+              "metric.label.path"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Requests by HTTP status",
+      "description": "",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "{{metric.label.status_code}}",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_requests"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [
+              "metric.label.status_code"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Latency",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Search latency (p50 / p95 / p99)",
+      "description": "POST /jobs/search, end to end. Bimodal: a cache hit is ~0.25s, a miss several seconds, so read the percentiles rather than a mean.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p50",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_request_duration",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/jobs/search"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_50",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p95",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_request_duration",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/jobs/search"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_95",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p99",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_request_duration",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/jobs/search"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_99",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Paper lookup latency (p50 / p95 / p99)",
+      "description": "POST /institutions/papers. Slow when it has to fetch a never-seen institution from Inspire.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p50",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_request_duration",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/institutions/papers"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_50",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p95",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_request_duration",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/institutions/papers"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_95",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p99",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_request_duration",
+              "AND",
+              "metric.label.path",
+              "=",
+              "/institutions/papers"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_99",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Step latency p95",
+      "description": "Where a slow search spends its time: cache lookup, query rewrite (LLM), Inspire, web fallback, deferred papers.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "{{metric.label.step}}",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_step_duration"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [
+              "metric.label.step"
+            ],
+            "perSeriesAligner": "ALIGN_PERCENTILE_95",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Cloud Run latency p95 (incl. cold starts)",
+      "description": "Measured by Cloud Run itself, so it includes time queued waiting for an instance to start.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p95",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "run.googleapis.com/request_latencies",
+              "AND",
+              "resource.label.service_name",
+              "=",
+              "pulsar-backend"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_95",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Cache, LLM and fallbacks",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "piechart",
+      "title": "Cache hits vs misses",
+      "description": "Misses include queries that skipped the cache for naming no career stage.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "hit={{metric.label.hit}}",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_cache_lookups"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [
+              "metric.label.hit"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        },
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "LLM provider outcomes",
+      "description": "A rise in llm_provider_failed means the primary provider is failing over.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 31,
+        "w": 9,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "{{metric.label.provider}} {{metric.label.event}}",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_events",
+              "AND",
+              "metric.label.event",
+              "=~",
+              "llm_provider_.*|llm_all_providers_failed"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [
+              "metric.label.event",
+              "metric.label.provider"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Events (refusals, fallbacks, failures)",
+      "description": "",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 31,
+        "w": 9,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "{{metric.label.event}}",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/pulsar_events",
+              "AND",
+              "metric.label.event",
+              "!=~",
+              "llm_provider_.*"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [
+              "metric.label.event"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "Cloud Run",
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Instances",
+      "description": "Scale-to-zero means idle is normal; frequent 0 -> 1 shows up as cold-start latency.",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "{{metric.label.state}}",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "run.googleapis.com/container/instance_count",
+              "AND",
+              "resource.label.service_name",
+              "=",
+              "pulsar-backend"
+            ],
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [
+              "metric.label.state"
+            ],
+            "perSeriesAligner": "ALIGN_MEAN",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum"
+          ]
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "CPU utilisation p95",
+      "description": "",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 40,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p95",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "run.googleapis.com/container/cpu/utilizations",
+              "AND",
+              "resource.label.service_name",
+              "=",
+              "pulsar-backend"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_95",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Memory utilisation p95",
+      "description": "",
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "gcm"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 40,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "gcm"
+          },
+          "queryType": "timeSeriesList",
+          "aliasBy": "p95",
+          "timeSeriesList": {
+            "projectName": "pulsar-jobs-agent",
+            "filters": [
+              "metric.type",
+              "=",
+              "run.googleapis.com/container/memory/utilizations",
+              "AND",
+              "resource.label.service_name",
+              "=",
+              "pulsar-backend"
+            ],
+            "crossSeriesReducer": "REDUCE_NONE",
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_PERCENTILE_95",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "view": "FULL"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "pulsar_step_duration",
+  "description": "Duration in ms of each step inside a search (cache_lookup, query_rewrite, inspire_search, web_fallback, deferred_papers, llm_provider_succeeded).",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"pulsar-backend\" AND jsonPayload.message=(\"cache_lookup\" OR \"query_rewrite\" OR \"inspire_search\" OR \"web_fallback\" OR \"deferred_papers\" OR \"llm_provider_succeeded\")",
+  "valueExtractor": "EXTRACT(jsonPayload.duration_ms)",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "DISTRIBUTION",
+    "unit": "ms",
+    "labels": [{"key": "step", "valueType": "STRING"}]
+  },
+  "labelExtractors": {"step": "EXTRACT(jsonPayload.message)"},
+  "bucketOptions": {"exponentialBuckets": {"numFiniteBuckets": 30, "growthFactor": 1.5, "scale": 10}}
+}

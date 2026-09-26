@@ -83,20 +83,17 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   entry, they just aren't compared. The pre-check is also a keyword list, so
   an unusual phrasing ("W2 position", "chargé de recherche") reads as no
   stage and quietly skips the cache.
-- **Production logs aren't on a dashboard.** The backend already emits
-  structured JSON to Cloud Logging, with a `request_id` on every line and a
-  `duration_ms` on each step (`cache_lookup`, `query_rewrite`,
-  `inspire_search`, `deferred_papers`, `web_fallback`, `request_completed`),
-  so the raw material for charts exists. What's missing is anywhere to see
-  it: answering "is it slower than last week?" today means reading
-  `gcloud logging read` by hand. Exporting these to Grafana - via a log sink
-  and Prometheus, or the Cloud Monitoring datasource - would give p50/p95
-  latency per step, error and refusal rates, cache hit rate, and how often
-  the web fallback fires and fails. Worth adding alerts on the symptoms
-  users feel (5xx rate, p95 search latency) rather than on every internal
-  wobble. Note the distributions are strongly bimodal - a cache hit is
-  ~0.25s against several seconds for a miss - so a mean over both would say
-  nothing useful; chart the percentiles, split by `cached`.
+- **Dashboard runs locally, and there are no alerts.** A Grafana dashboard
+  over Cloud Run's metrics and log-based metrics built from the structured
+  logs lives in `observability/` (latency percentiles per step, cache hit
+  rate, LLM failover, refusals, web fallback failures). It only exists while
+  the local Grafana container is running, and nothing pages anyone: hosting
+  it (e.g. Grafana Cloud's free tier) and alerting on the symptoms users feel
+  (5xx rate, p95 search latency) rather than every internal wobble are still
+  open. The search-latency panel also can't split cache hits from misses -
+  the `request_completed` log line doesn't record `cached` - and the
+  distribution is strongly bimodal (~0.25s hit vs several seconds miss), so
+  read the percentiles, not a mean.
 - **No per-client rate limiting.** Nothing stops one caller from spending the
   shared Tavily credits or the LLM providers' free-tier quotas for everyone.
   A refused off-topic query is cheap (one LLM call, no web search), but it is

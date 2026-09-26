@@ -11,5 +11,29 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # Dashboards over the deployed backend's Cloud Monitoring data. Opt-in so a
+  # plain `docker compose up` still starts only Postgres:
+  #   docker compose --profile observability up -d grafana
+  # See observability/README.md for the one-time setup.
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: ["observability"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      # The Cloud Monitoring datasource authenticates with gcloud's
+      # Application Default Credentials (`gcloud auth application-default login`).
+      GOOGLE_APPLICATION_CREDENTIALS: /etc/gcloud/application_default_credentials.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # A directory, not the single credentials file: Docker would create a
+      # directory at that path if the file didn't exist yet, breaking gcloud.
+      - ${HOME}/.config/gcloud:/etc/gcloud:ro
+
 volumes:
   postgres_data:
+  grafana_data:

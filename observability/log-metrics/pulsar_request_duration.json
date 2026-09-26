@@ -1,0 +1,14 @@
+{
+  "name": "pulsar_request_duration",
+  "description": "End-to-end API request duration in ms, by endpoint.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"pulsar-backend\" AND jsonPayload.message=\"request_completed\" AND jsonPayload.path=(\"/jobs/search\" OR \"/institutions/papers\")",
+  "valueExtractor": "EXTRACT(jsonPayload.duration_ms)",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "DISTRIBUTION",
+    "unit": "ms",
+    "labels": [{"key": "path", "valueType": "STRING"}]
+  },
+  "labelExtractors": {"path": "EXTRACT(jsonPayload.path)"},
+  "bucketOptions": {"exponentialBuckets": {"numFiniteBuckets": 30, "growthFactor": 1.5, "scale": 10}}
+}
