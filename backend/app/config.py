@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # empty, exactly as it did before the fallback existed.
     tavily_api_key: str | None = None
 
+    # Per-client caps on /jobs/search (see app/rate_limit.py), so one caller
+    # can't spend the shared LLM quotas and Tavily credits for everyone.
+    # Generous for a person searching by hand; 0 turns a window off.
+    search_rate_limit_per_minute: int = 10
+    search_rate_limit_per_hour: int = 100
+
 
 @lru_cache
 def get_settings() -> Settings:

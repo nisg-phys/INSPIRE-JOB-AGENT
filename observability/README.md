@@ -52,6 +52,8 @@ counters start empty and fill as traffic arrives. Cloud Run's built-in panels
 - Only `/jobs/search` and `/institutions/papers` are counted per endpoint.
   That is deliberate: a metric label per raw URL path would let bots probing
   random `/jobs/...` URLs create unbounded series.
-- The search-latency panel can't yet split cache hits from misses (the
-  request log line doesn't record `cached`). The step-latency panel shows the
-  same bimodality via `cache_lookup` vs `query_rewrite`/`inspire_search`.
+- The search-latency panel is split by the `cached` label on
+  `request_completed`: a hit is ~0.25s, a miss several seconds, so a combined
+  percentile would describe neither. Data logged before the label existed
+  shows as a series with `cached=` empty. After pulling this change, re-run
+  `create-log-metrics.sh` to add the label to the metric.

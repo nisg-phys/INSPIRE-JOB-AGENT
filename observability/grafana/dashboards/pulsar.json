@@ -551,8 +551,8 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Search latency (p50 / p95 / p99)",
-      "description": "POST /jobs/search, end to end. Bimodal: a cache hit is ~0.25s, a miss several seconds, so read the percentiles rather than a mean.",
+      "title": "Search latency by cache hit (p50 / p95 / p99)",
+      "description": "POST /jobs/search, end to end, split by whether the semantic cache answered: a hit is ~0.25s, a miss several seconds. Series with an empty cached label predate the split.",
       "datasource": {
         "type": "stackdriver",
         "uid": "gcm"
@@ -571,7 +571,7 @@
             "uid": "gcm"
           },
           "queryType": "timeSeriesList",
-          "aliasBy": "p50",
+          "aliasBy": "p50 cached={{metric.label.cached}}",
           "timeSeriesList": {
             "projectName": "pulsar-jobs-agent",
             "filters": [
@@ -597,7 +597,7 @@
             "uid": "gcm"
           },
           "queryType": "timeSeriesList",
-          "aliasBy": "p95",
+          "aliasBy": "p95 cached={{metric.label.cached}}",
           "timeSeriesList": {
             "projectName": "pulsar-jobs-agent",
             "filters": [
@@ -623,7 +623,7 @@
             "uid": "gcm"
           },
           "queryType": "timeSeriesList",
-          "aliasBy": "p99",
+          "aliasBy": "p99 cached={{metric.label.cached}}",
           "timeSeriesList": {
             "projectName": "pulsar-jobs-agent",
             "filters": [

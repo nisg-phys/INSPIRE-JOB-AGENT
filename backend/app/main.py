@@ -2,7 +2,7 @@ import logging
 import time
 import uuid
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,7 @@ from app.query_rewriter import (
     mentions_career_stage,
     to_job_query_params,
 )
+from app.rate_limit import limit_search
 from app.tracing import setup_tracing
 from app.web_jobs import fallback_results, is_enabled, should_fall_back
 
@@ -81,15 +82,19 @@ async def request_logging_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
         duration_ms = round((time.monotonic() - start) * 1000, 1)
-        logger.info(
-            "request_completed",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
-                "duration_ms": duration_ms,
-            },
-        )
+        extra = {
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        }
+        # Set by the search endpoint. Search latency is bimodal - ~0.25s on
+        # a cache hit, several seconds on a miss - so its percentiles only
+        # mean something once the two are split apart.
+        cached = getattr(request.state, "cached", None)
+        if cached is not None:
+            extra["cached"] = cached
+        logger.info("request_completed", extra=extra)
         response.headers["x-request-id"] = request_id
         return response
     except Exception:
@@ -133,8 +138,8 @@ class SearchResponse(BaseModel):
     paper_categories: list[str] = Field(default_factory=list)
 
 
-@app.post("/jobs/search", response_model=SearchResponse)
-def search(request: SearchRequest) -> SearchResponse:
+@app.post("/jobs/search", response_model=SearchResponse, dependencies=[Depends(limit_search)])
+def search(request: SearchRequest, http_request: Request) -> SearchResponse:
     # Last-resort safety net: an unexpected failure anywhere in _search
     # (e.g. a dropped DB connection - see db.py's pool_pre_ping for the
     # actual fix, this is the backstop for whatever that doesn't cover)
@@ -142,7 +147,9 @@ def search(request: SearchRequest) -> SearchResponse:
     # the response. HTTPExceptions are deliberate (already have a clean
     # status/detail from the try/excepts below) and pass through untouched.
     try:
-        return _search(request)
+        response = _search(request)
+        http_request.state.cached = response.cached
+        return response
     except HTTPException:
         raise
     except Exception as exc:

@@ -19,3 +19,17 @@ os.environ["OPIK_TRACK_DISABLE"] = "True"
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test")
 for _placeholder in ("GROQ_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
     os.environ.setdefault(_placeholder, "test-key-not-used")
+
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fresh_search_rate_limit():
+    """The search limiter is module state shared by every TestClient call,
+    so without this the endpoint tests would trip it on each other's counts.
+    """
+    from app.rate_limit import search_limiter
+
+    search_limiter.reset()
+    yield

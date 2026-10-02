@@ -700,6 +700,14 @@
           });
           const data = await response.json();
 
+          // Errors carry a human-readable detail (e.g. the 429 from the
+          // per-client rate limit says how long to wait) and no results.
+          if (!response.ok) {
+            statusEl.textContent =
+              typeof data.detail === "string" ? data.detail : `Error: ${response.status}`;
+            return;
+          }
+
           if (data.needs_clarification) {
             pendingQuery = query;
             clarificationQuestionEl.textContent = data.clarification_question;
