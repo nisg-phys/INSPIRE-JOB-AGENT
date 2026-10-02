@@ -41,12 +41,17 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   filter is applied as a hard filter. Worth investigating on its own: the web
   fallback currently hides this by finding such postings anyway, which is a
   workaround rather than a fix.
-- **The same position listed twice.** Web results are deduplicated on title
-  plus employer, so one posting mirrored with different wording still appears
-  twice - e.g. "PhD Position in Experimental Astroparticle Physics" and
-  "... and Neutrino Astronomy" from the same institute. Fuzzy title matching,
-  or comparing the destination page rather than the search snippet, would
-  close this.
+- **The same position listed twice (mostly fixed).** Web results are now
+  merged when they point at the same page (URL compared without scheme,
+  `www.`, trailing slash, fragment or `utm_*` parameters), or when they come
+  from the same employer and one title's topic words all appear in the
+  other's - so "PhD Position in Experimental Astroparticle Physics" and
+  "... and Neutrino Astronomy" show once (`_dedupe` in
+  `backend/app/web_jobs.py`). The matching errs towards keeping rows: career
+  stages must match exactly and a partial match needs three shared topic
+  words, so mirrors reworded with synonyms, or listed under two spellings of
+  the employer, still appear twice. Comparing the destination pages
+  themselves would catch those, at the cost of fetching them.
 - **Expired web postings.** Inspire rows are filtered by a real `status=open`
   field. Web rows have only a heuristic: a posting is dropped if the LLM
   extracted a deadline that has passed. Most pages state no deadline in their

@@ -127,6 +127,11 @@ def career_stages(text: str) -> frozenset[str]:
     return frozenset(match.lastgroup for match in _CAREER_STAGE_RE.finditer(text))
 
 
+def without_career_stages(text: str) -> str:
+    """The text with every career-stage term removed, leaving the topic."""
+    return _CAREER_STAGE_RE.sub(" ", text)
+
+
 def mentions_career_stage(text: str) -> bool:
     """Whether a raw query already settles which career stage is wanted.
 

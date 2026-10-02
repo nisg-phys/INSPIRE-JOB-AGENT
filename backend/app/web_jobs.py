@@ -17,8 +17,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import date
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 import opik
 from pydantic import BaseModel, ValidationError
@@ -28,7 +29,12 @@ from app.config import get_settings
 from app.formatter import KNOWN_APPLICATION_PLATFORMS, FormattedJob, _apply_via
 from app.inspire_client import RANKS
 from app.llm.base import LLMProvider, LLMProviderError
-from app.query_rewriter import ParsedQuery, _default_provider
+from app.query_rewriter import (
+    ParsedQuery,
+    _default_provider,
+    career_stages,
+    without_career_stages,
+)
 
 logger = logging.getLogger("app.web_jobs")
 
@@ -296,26 +302,92 @@ def _is_listing_url(url: str) -> bool:
     return False
 
 
+# Words that say "this is a job" rather than which job, so two wordings of
+# one posting differ only by them.
+_TITLE_FILLER = {
+    "a", "an", "and", "at", "for", "in", "of", "on", "the", "to", "with",
+    "position", "job", "vacancy", "vacancie", "opening", "opportunity", "opportunitie",
+}
+
+# A title that only contains another's words is merged only when they share
+# at least this many topic words. Fewer, and two different jobs at one
+# employer could match on little more than a field name.
+_MIN_SHARED_TITLE_WORDS = 3
+
+
+def _title_words(title: str) -> frozenset[str]:
+    """A title's topic words: career-stage terms and filler removed, crude
+    plural folding so "Positions" and "Position" agree.
+    """
+    words = re.findall(r"[a-z0-9]+", without_career_stages(title).casefold())
+    folded = (word[:-1] if len(word) > 4 and word.endswith("s") else word for word in words)
+    return frozenset(word for word in folded if word not in _TITLE_FILLER)
+
+
+def _url_key(url: str) -> str:
+    """A URL with the differences that don't change the page removed:
+    scheme, "www.", a trailing slash, the fragment and utm_* tracking
+    parameters. Other query parameters stay - they often name the job.
+    """
+    parsed = urlparse(url)
+    query = urlencode(
+        sorted((k, v) for k, v in parse_qsl(parsed.query) if not k.lower().startswith("utm_"))
+    )
+    host = parsed.netloc.lower().removeprefix("www.")
+    return f"{host}{parsed.path.rstrip('/')}?{query}"
+
+
+def _same_position(a: FormattedJob, b: FormattedJob) -> bool:
+    """Whether two rows from one known employer advertise the same job.
+
+    True when one title's topic words all appear in the other's, e.g. "PhD
+    Position in Experimental Astroparticle Physics" and "... and Neutrino
+    Astronomy". The career stage must match exactly, so a PhD and a postdoc
+    in the same group never merge, and a partial match needs a few shared
+    topic words, so "Postdoctoral Research Associate" doesn't swallow every
+    more specific postdoc the same university advertises.
+    """
+    if career_stages(a.title) != career_stages(b.title):
+        return False
+    words_a, words_b = _title_words(a.title), _title_words(b.title)
+    if words_a == words_b:
+        return True
+    shared = words_a & words_b
+    return len(shared) >= _MIN_SHARED_TITLE_WORDS and shared in (words_a, words_b)
+
+
 def _dedupe(jobs: list[FormattedJob]) -> list[FormattedJob]:
     """Drop repeats of one position advertised at several URLs.
 
     A posting is routinely mirrored - the group's own page, a job board and
-    Inspire can all carry it - and the URL hash can't see that they're the
-    same job. Keyed on title plus institution, which is what a reader would
-    compare. First occurrence wins, so search rank decides.
+    Inspire can all carry it, often worded differently - and the URL hash
+    can't see that they're the same job. Two rows are one job when they
+    point at the same page, or when they come from the same employer with
+    matching titles (see _same_position). First occurrence wins, so search
+    rank decides.
 
-    Only applied when the employer is known: titles like "Postdoctoral
-    Research Associate" are common enough that merging two of them on title
-    alone would silently drop a different job.
+    Title matching only applies when the employer is known: titles like
+    "Postdoctoral Research Associate" are common enough that merging two of
+    them on title alone would silently drop a different job. When unsure,
+    rows are kept - a duplicate costs a glance, a wrongly merged job is
+    never seen.
     """
-    seen: set[tuple[str, str]] = set()
-    unique = []
+    unknown = UNKNOWN_INSTITUTION.casefold()
+    unique: list[FormattedJob] = []
+    seen_urls: set[str] = set()
     for job in jobs:
-        institution = job.institution.strip().casefold()
-        key = (job.title.strip().casefold(), institution)
-        if institution != UNKNOWN_INSTITUTION.casefold() and key in seen:
+        url = _url_key(job.link) if job.link else None
+        if url is not None and url in seen_urls:
             continue
-        seen.add(key)
+        institution = " ".join(job.institution.split()).casefold()
+        if institution != unknown and any(
+            " ".join(kept.institution.split()).casefold() == institution
+            and _same_position(job, kept)
+            for kept in unique
+        ):
+            continue
+        if url is not None:
+            seen_urls.add(url)
         unique.append(job)
     return unique
 
