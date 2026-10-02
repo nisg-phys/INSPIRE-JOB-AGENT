@@ -80,19 +80,51 @@ Do not invent information that isn't in the query."""
 MAX_KEYWORD_CHARS = 200
 
 # Words that show a query has already settled the career stage - either by
-# naming one, or by asking for everything. Spelling variants and common
-# misspellings are included because this runs before the LLM sees the query.
-_CAREER_STAGE_TERMS = [
-    r"post[\s-]?docs?", r"post[\s-]?doctoral", r"ph\.?\s?d", r"doctoral", r"doctorate",
-    r"grad(uate)?\s+student", r"masters?", r"m\.?sc", r"undergrad(uate)?", r"intern(ship)?",
-    r"summer\s+student", r"faculty", r"professor", r"prof", r"lecturer", r"tenure[\s-]?track",
-    r"tenured", r"assistant", r"associate", r"senior", r"junior", r"staff", r"scientist",
-    r"fellow(ship)?", r"visit(ing|or)", r"sabbatical",
+# naming one, or by asking for everything - grouped by the stage they name.
+# Spelling variants and common misspellings are included because this runs
+# before the LLM sees the query. Groups only merge true synonyms: two
+# phrasings split across groups just cost a cache miss, but two different
+# stages merged into one group would let the cache serve one for the other.
+_CAREER_STAGE_TERMS = {
+    "postdoc": [r"post[\s-]?docs?", r"post[\s-]?doctoral"],
+    "phd": [r"ph\.?\s?ds?", r"doctoral", r"doctorate", r"grad(uate)?\s+students?"],
+    "master": [r"masters?", r"m\.?sc"],
+    "undergraduate": [r"undergrad(uate)?s?", r"summer\s+students?"],
+    "intern": [r"intern(ship)?s?"],
+    "faculty": [r"faculty", r"professors?", r"prof", r"lecturers?", r"tenure[\s-]?track"],
+    "tenured": [r"tenured"],
+    "assistant": [r"assistant"],
+    "associate": [r"associate"],
+    "senior": [r"senior"],
+    "junior": [r"junior"],
+    "staff": [r"staff"],
+    "scientist": [r"scientists?"],
+    "fellow": [r"fellow(ship)?s?"],
+    "visitor": [r"visit(ing|ors?)", r"sabbaticals?"],
     # "asked for everything" counts as settled: the prompt maps these to no
     # rank filter rather than to a clarifying question.
-    r"any", r"all", r"every(thing)?",
-]
-_CAREER_STAGE_RE = re.compile(r"\b(" + "|".join(_CAREER_STAGE_TERMS) + r")\b", re.IGNORECASE)
+    "any": [r"any", r"all", r"every(thing)?"],
+}
+_CAREER_STAGE_RE = re.compile(
+    "|".join(
+        rf"\b(?P<{stage}>{'|'.join(patterns)})\b"
+        for stage, patterns in _CAREER_STAGE_TERMS.items()
+    ),
+    re.IGNORECASE,
+)
+
+
+def career_stages(text: str) -> frozenset[str]:
+    """The career stages a raw query names, as canonical group names.
+
+    Used as part of the semantic cache key. Embeddings barely register the
+    stage - "phd in string theory" scores 0.77 against "postdoc in string
+    theory" - so two queries may share a cache entry only if this matches
+    exactly. Computed from text rather than the LLM's parsed ranks because
+    the cache is consulted before the LLM runs; a hit that waited for it
+    would lose most of what caching saves.
+    """
+    return frozenset(match.lastgroup for match in _CAREER_STAGE_RE.finditer(text))
 
 
 def mentions_career_stage(text: str) -> bool:
@@ -106,7 +138,7 @@ def mentions_career_stage(text: str) -> bool:
     asked. Erring towards False only costs an LLM call, which an ambiguous
     query needs anyway to produce its question.
     """
-    return bool(_CAREER_STAGE_RE.search(text))
+    return bool(career_stages(text))
 
 
 class QueryRewriteError(RuntimeError):

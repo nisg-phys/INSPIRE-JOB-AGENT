@@ -70,19 +70,17 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   it is a model judgement, not a rule: it has no deterministic backstop, and
   the boundary for adjacent fields (applied maths, scientific computing) is
   set by prompt wording alone.
-- **The semantic cache can still cross career stages.** A query with no
-  career stage now skips the cache entirely (`mentions_career_stage` in
-  `backend/app/query_rewriter.py`), which stops a bare "string theory" being
-  answered with a cached postdoc search instead of a clarifying question.
-  Two queries that each *do* name a stage are still compared by embedding
-  alone, and those embeddings barely register the difference: "phd in string
-  theory" scores 0.77 against a cached "postdoc in string theory", just under
-  the 0.8 threshold. Nothing guarantees a similar pair stays below it. The
-  robust fix is to make the stage part of the cache key rather than trusting
-  the embedding to encode it - the parsed `ranks` are already stored on each
-  entry, they just aren't compared. The pre-check is also a keyword list, so
-  an unusual phrasing ("W2 position", "chargé de recherche") reads as no
-  stage and quietly skips the cache.
+- **Career-stage detection for the cache is a keyword list.** A cache entry
+  is only served when its query names the same career stages as the incoming
+  one (`career_stages` in `backend/app/query_rewriter.py`), so "phd in string
+  theory" can no longer be answered with a cached "postdoc in string theory"
+  however close their embeddings are (0.77, just under the 0.8 threshold).
+  The key is computed from the raw text rather than the LLM's parsed `ranks`
+  because the cache is checked before the LLM runs. Its weakness is the
+  keyword list itself: an unusual phrasing ("W2 position", "chargé de
+  recherche") reads as no stage and quietly skips the cache, and two
+  phrasings the list doesn't know are synonyms only cost a miss, never a
+  wrong hit.
 - **Dashboard runs locally, and there are no alerts.** A Grafana dashboard
   over Cloud Run's metrics and log-based metrics built from the structured
   logs lives in `observability/` (latency percentiles per step, cache hit
