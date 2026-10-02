@@ -1292,6 +1292,89 @@
         "overrides": []
       },
       "options": {}
+    },
+    {
+      "id": 23,
+      "type": "row",
+      "title": "Logs",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 24,
+      "type": "logs",
+      "title": "Warnings and errors",
+      "description": "Backend log lines at WARNING or above. Expand a line for its fields; filter Logs Explorer by its request_id to see everything that request did. Older entries predate the severity field, hence the jsonPayload.level clause.",
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "gcl"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "gcl"
+          },
+          "projectId": "pulsar-jobs-agent",
+          "queryText": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"pulsar-backend\"\nAND (severity>=WARNING OR jsonPayload.level=(\"WARNING\" OR \"ERROR\" OR \"CRITICAL\"))"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 25,
+      "type": "logs",
+      "title": "Backend logs",
+      "description": "Every structured log line the backend writes, newest first. httpx's per-request lines are left out - an Opik keep-alive ping alone logs one every ~11s.",
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "gcl"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "gcl"
+          },
+          "projectId": "pulsar-jobs-agent",
+          "queryText": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"pulsar-backend\"\nAND jsonPayload.message:*\nAND NOT jsonPayload.logger=\"httpx\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
     }
   ],
   "templating": {

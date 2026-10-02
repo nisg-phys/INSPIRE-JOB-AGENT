@@ -5,6 +5,10 @@ A Grafana dashboard over the deployed backend (Cloud Run service
 
 - **Cloud Run's built-in metrics**: instance count, CPU/memory, and latency as
   Cloud Run measures it (including cold starts).
+- **Cloud Logging**, for the raw log lines themselves: the dashboard's Logs
+  row shows warnings and errors, and every structured line the backend
+  writes. Needs the `googlecloud-logging-datasource` plugin, which the compose
+  file installs.
 - **Log-based metrics** built from the backend's structured JSON logs
   (`backend/app/logging_config.py`): traffic per endpoint, latency percentiles,
   per-step timings, cache hit rate, LLM provider failover, refusals, and web
@@ -19,8 +23,8 @@ A Grafana dashboard over the deployed backend (Cloud Run service
 # 2. Give Grafana credentials (opens a browser).
 gcloud auth application-default login
 
-# 3. Start Grafana.
-docker compose --profile observability up -d grafana
+# 3. Start Grafana (re-create it after pulling a change to the compose file).
+docker compose --profile observability up -d --force-recreate grafana
 ```
 
 Open <http://localhost:3000> (login `admin` / `admin`, bound to localhost
@@ -29,6 +33,29 @@ only). The **Pulsar backend** dashboard is provisioned automatically.
 Log-based metrics only count logs written **after** they are created, so the
 counters start empty and fill as traffic arrives. Cloud Run's built-in panels
 (instances, CPU, memory) have history immediately.
+
+## Reading the logs
+
+The **Logs** row at the bottom of the dashboard has two panels:
+
+- **Warnings and errors** - anything at WARNING or above.
+- **Backend logs** - every structured line, newest first. httpx's per-request
+  lines are left out (an Opik keep-alive ping alone logs one every ~11s).
+
+Click a line to expand its fields. To follow one request end to end, copy its
+`request_id` and use **Explore** (left sidebar) with the Google Cloud Logging
+datasource and a query such as:
+
+```
+resource.type="cloud_run_revision" AND resource.labels.service_name="pulsar-backend"
+AND jsonPayload.request_id="3d333d8a5f02"
+```
+
+Queries use the [Logging query language](https://cloud.google.com/logging/docs/view/logging-query-language),
+the same as Logs Explorer in the Cloud console. Lines logged before the
+backend started writing a `severity` field are stored without one, so they
+aren't coloured by level; the warnings panel also matches them on
+`jsonPayload.level`.
 
 ## How it fits together
 

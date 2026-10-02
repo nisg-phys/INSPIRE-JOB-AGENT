@@ -1,0 +1,15 @@
+apiVersion: 1
+datasources:
+  # Raw log entries, for the dashboard's Logs row. Cloud Monitoring (the
+  # other datasource) only serves metrics; reading the log lines themselves
+  # needs this separate plugin, installed by the compose file.
+  - name: Google Cloud Logging
+    type: googlecloud-logging-datasource
+    uid: gcl
+    access: proxy
+    jsonData:
+      # Same as Cloud Monitoring: "gce" uses Application Default Credentials,
+      # which the compose file points at your gcloud ADC.
+      authenticationType: gce
+      defaultProject: pulsar-jobs-agent
+      gceDefaultProject: pulsar-jobs-agent

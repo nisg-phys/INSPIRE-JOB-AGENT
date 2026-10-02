@@ -23,6 +23,9 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
+      # Reads raw log lines for the dashboard's Logs row; the bundled Cloud
+      # Monitoring datasource only serves metrics.
+      GF_INSTALL_PLUGINS: googlecloud-logging-datasource
       # The Cloud Monitoring datasource authenticates with gcloud's
       # Application Default Credentials (`gcloud auth application-default login`).
       GOOGLE_APPLICATION_CREDENTIALS: /etc/gcloud/application_default_credentials.json
