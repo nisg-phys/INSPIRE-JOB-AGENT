@@ -18,6 +18,10 @@ docker-compose up
 
 Copy `.env.example` to `.env` and fill in required values before running any service.
 
+Database migrations are applied by hand, not by the deploy: run
+`cd backend && alembic upgrade head` against the production `DATABASE_URL`
+before merging a change that adds one to `main`.
+
 ## Future scope
 
 - **Job sources beyond Inspire-HEP (partly done).** Inspire-HEP's jobs API is
@@ -30,9 +34,11 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   per query, never ingested, so they aren't deduped against Inspire postings,
   aren't available for paper enrichment (their institution names aren't
   Inspire's canonical spellings), and can't be refreshed on a schedule. A
-  real crawler that ingests boards into `jobs_raw` would fix all three - note
-  it would need its own institution-name normalization first, since
-  `worker/worker/discovery.py` would otherwise chase those names forever.
+  real crawler that ingests boards into `jobs_raw` would fix all three. Its
+  first prerequisite, resolving institution names to Inspire records, now
+  exists (`institution_aliases`, below). Still open: search only queries
+  Inspire live and never reads `jobs_raw`, so ingested rows would also need
+  a search path of their own before any user saw them.
 - **Inspire queries that miss postings Inspire actually has.** Searching the
   web for "postdoc in celestial holography" surfaced
   `inspirehep.net/jobs/2844516` ("Simons Fellow in Celestial Holography") - a
@@ -41,12 +47,17 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   filter is applied as a hard filter. Worth investigating on its own: the web
   fallback currently hides this by finding such postings anyway, which is a
   workaround rather than a fix.
-- **The same position listed twice.** Web results are deduplicated on title
-  plus employer, so one posting mirrored with different wording still appears
-  twice - e.g. "PhD Position in Experimental Astroparticle Physics" and
-  "... and Neutrino Astronomy" from the same institute. Fuzzy title matching,
-  or comparing the destination page rather than the search snippet, would
-  close this.
+- **The same position listed twice (mostly fixed).** Web results are now
+  merged when they point at the same page (URL compared without scheme,
+  `www.`, trailing slash, fragment or `utm_*` parameters), or when they come
+  from the same employer and one title's topic words all appear in the
+  other's - so "PhD Position in Experimental Astroparticle Physics" and
+  "... and Neutrino Astronomy" show once (`_dedupe` in
+  `backend/app/web_jobs.py`). The matching errs towards keeping rows: career
+  stages must match exactly and a partial match needs three shared topic
+  words, so mirrors reworded with synonyms, or listed under two spellings of
+  the employer, still appear twice. Comparing the destination pages
+  themselves would catch those, at the cost of fetching them.
 - **Expired web postings.** Inspire rows are filtered by a real `status=open`
   field. Web rows have only a heuristic: a posting is dropped if the LLM
   extracted a deadline that has passed. Most pages state no deadline in their
@@ -70,46 +81,46 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   it is a model judgement, not a rule: it has no deterministic backstop, and
   the boundary for adjacent fields (applied maths, scientific computing) is
   set by prompt wording alone.
-- **The semantic cache can still cross career stages.** A query with no
-  career stage now skips the cache entirely (`mentions_career_stage` in
-  `backend/app/query_rewriter.py`), which stops a bare "string theory" being
-  answered with a cached postdoc search instead of a clarifying question.
-  Two queries that each *do* name a stage are still compared by embedding
-  alone, and those embeddings barely register the difference: "phd in string
-  theory" scores 0.77 against a cached "postdoc in string theory", just under
-  the 0.8 threshold. Nothing guarantees a similar pair stays below it. The
-  robust fix is to make the stage part of the cache key rather than trusting
-  the embedding to encode it - the parsed `ranks` are already stored on each
-  entry, they just aren't compared. The pre-check is also a keyword list, so
-  an unusual phrasing ("W2 position", "chargé de recherche") reads as no
-  stage and quietly skips the cache.
-- **Production logs aren't on a dashboard.** The backend already emits
-  structured JSON to Cloud Logging, with a `request_id` on every line and a
-  `duration_ms` on each step (`cache_lookup`, `query_rewrite`,
-  `inspire_search`, `deferred_papers`, `web_fallback`, `request_completed`),
-  so the raw material for charts exists. What's missing is anywhere to see
-  it: answering "is it slower than last week?" today means reading
-  `gcloud logging read` by hand. Exporting these to Grafana - via a log sink
-  and Prometheus, or the Cloud Monitoring datasource - would give p50/p95
-  latency per step, error and refusal rates, cache hit rate, and how often
-  the web fallback fires and fails. Worth adding alerts on the symptoms
-  users feel (5xx rate, p95 search latency) rather than on every internal
-  wobble. Note the distributions are strongly bimodal - a cache hit is
-  ~0.25s against several seconds for a miss - so a mean over both would say
-  nothing useful; chart the percentiles, split by `cached`.
-- **No per-client rate limiting.** Nothing stops one caller from spending the
-  shared Tavily credits or the LLM providers' free-tier quotas for everyone.
-  A refused off-topic query is cheap (one LLM call, no web search), but it is
-  still a call.
-- **Paper enrichment for free-text institutions (partly fixed).** Papers are
-  now fetched by Inspire's institution record id (`affid <id>`) whenever the
-  job posting links one (~95% of open postings), which fixes the original
-  problem of the same institution being spelled differently across postings
-  ("Kentucky U." vs "U. Kentucky") and matching nothing. What remains: the
-  ~5% of institution entries that are free text with no linked record still
-  fall back to an exact-phrase name search, so a non-canonical spelling (e.g.
-  a posting that writes "U. Kentucky") still gets no papers. Resolving those
-  by fuzzy-matching Inspire's institution search was rejected on purpose: it
-  ranks the wrong record first (`Kentucky State U.` for "U. Kentucky"), and
-  showing another university's papers is worse than showing none. A curated
-  alias table would be the safe way to close this gap.
+- **Career-stage detection for the cache is a keyword list.** A cache entry
+  is only served when its query names the same career stages as the incoming
+  one (`career_stages` in `backend/app/query_rewriter.py`), so "phd in string
+  theory" can no longer be answered with a cached "postdoc in string theory"
+  however close their embeddings are (0.77, just under the 0.8 threshold).
+  The key is computed from the raw text rather than the LLM's parsed `ranks`
+  because the cache is checked before the LLM runs. Its weakness is the
+  keyword list itself: an unusual phrasing ("W2 position", "chargé de
+  recherche") reads as no stage and quietly skips the cache, and two
+  phrasings the list doesn't know are synonyms only cost a miss, never a
+  wrong hit.
+- **Dashboard runs locally, and there are no alerts.** A Grafana dashboard
+  over Cloud Run's metrics and log-based metrics built from the structured
+  logs lives in `observability/` (latency percentiles per step, search latency
+  split by cache hit, cache hit rate, LLM failover, refusals, web fallback
+  failures). It only exists while the local Grafana container is running, and
+  nothing pages anyone: hosting it (e.g. Grafana Cloud's free tier) and
+  alerting on the symptoms users feel (5xx rate, p95 search latency) rather
+  than every internal wobble are still open.
+- **Rate limiting is per instance and trusts X-Forwarded-For.**
+  `/jobs/search` is capped per client (10/minute, 100/hour by default; see
+  `backend/app/rate_limit.py`) so one caller can't spend the shared Tavily
+  credits and LLM free-tier quotas for everyone. Two gaps: counts live in each
+  Cloud Run instance's memory, so a client spread across N instances gets up
+  to N times the limit; and the client is identified by the first
+  X-Forwarded-For entry, which the client controls, so a determined caller
+  can rotate it. A shared store (e.g. Memorystore), and keying on an address
+  a trusted proxy appends rather than the client-supplied first entry, would
+  close both.
+- **Paper enrichment for free-text institutions (curation left).** Papers
+  are fetched by Inspire's institution record id (`affid <id>`) whenever one
+  is known. A posting usually links one (~95%); a free-text name now gets one
+  from `institution_aliases` (see `worker/worker/aliases.py`), which the
+  daily worker fills from every name->id link a posting has made and from
+  each institution record's own spellings (legacy ICN, name variants).
+  Matching only ignores case, punctuation and spacing - "U. Kentucky" vs
+  "Kentucky U." is never guessed, since fuzzy matching ranks the wrong record
+  first (`Kentucky State U.` for "U. Kentucky") and showing another
+  university's papers is worse than showing none. A free-text name whose
+  name search finds nothing lands in `unresolved_institutions`; what's left
+  is working through that list by hand (`python -m worker.aliases
+  unresolved`, then `... add "<name>" <inspire id>`), after which the next
+  worker run re-fetches it by id.

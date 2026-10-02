@@ -1,0 +1,12 @@
+{
+  "name": "pulsar_cache_lookups",
+  "description": "Semantic-cache lookups, by whether they hit. Lookups skipped for lacking a career stage count as misses.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"pulsar-backend\" AND jsonPayload.message=\"cache_lookup\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": [{"key": "hit", "valueType": "STRING"}]
+  },
+  "labelExtractors": {"hit": "EXTRACT(jsonPayload.hit)"}
+}

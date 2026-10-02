@@ -75,3 +75,36 @@ def recent_papers(institution: str, institution_id: str | None = None, size: int
             )
         )
     return papers
+
+
+class InstitutionRecord(BaseModel):
+    """The spellings an INSPIRE institution record vouches for itself."""
+
+    institution_id: str
+    legacy_icn: str | None = None
+    name_variants: list[str] = []
+    # Only the record's own name, never its parent's: in a multi-level
+    # hierarchy the later entries name the parent ("Durham University" on the
+    # IPPP record), which is a different record, and the first is often a
+    # generic unit ("Department of Physics and Astronomy"). So these are
+    # filled only for a single-level record such as CERN or DESY.
+    own_names: list[str] = []
+
+
+def institution_record(institution_id: str) -> InstitutionRecord:
+    """Fetch one institution record's spellings by its INSPIRE id."""
+    data = _request(
+        f"institutions/{institution_id}",
+        {"fields": "control_number,legacy_ICN,name_variants,institution_hierarchy"},
+    )
+    metadata = data["metadata"]
+    hierarchy = metadata.get("institution_hierarchy", [])
+    own_names = []
+    if len(hierarchy) == 1:
+        own_names = [value for value in (hierarchy[0].get("name"), hierarchy[0].get("acronym")) if value]
+    return InstitutionRecord(
+        institution_id=str(metadata.get("control_number", institution_id)),
+        legacy_icn=metadata.get("legacy_ICN"),
+        name_variants=[v["value"] for v in metadata.get("name_variants", []) if v.get("value")],
+        own_names=own_names,
+    )

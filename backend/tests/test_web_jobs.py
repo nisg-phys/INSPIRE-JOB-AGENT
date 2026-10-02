@@ -352,6 +352,110 @@ def test_same_generic_title_at_unknown_employers_is_not_merged():
     assert len(jobs) == 2
 
 
+def dedupe_titles(*rows, urls=None):
+    """Run extraction over one hit per (title, institution) row and return
+    the titles that survive dedup, in order.
+    """
+    urls = urls or [f"https://site{i}.example.edu/job" for i in range(len(rows))]
+    jobs = extract_jobs(
+        [hit(url=url) for url in urls],
+        ParsedQuery(),
+        provider=provider_returning(
+            *(entry(i, title=title, institution=institution) for i, (title, institution) in enumerate(rows))
+        ),
+        today=TODAY,
+    )
+    return [job.title for job in jobs]
+
+
+def test_one_position_worded_two_ways_at_one_employer_is_shown_once():
+    """The README case: a mirror that appends to the title still names the
+    same job.
+    """
+    titles = dedupe_titles(
+        ("PhD Position in Experimental Astroparticle Physics", "KIT"),
+        ("PhD Position in Experimental Astroparticle Physics and Neutrino Astronomy", "KIT"),
+    )
+
+    assert titles == ["PhD Position in Experimental Astroparticle Physics"]
+
+
+def test_career_stage_synonyms_and_filler_words_do_not_split_one_posting():
+    titles = dedupe_titles(
+        ("Postdoctoral Position in Holography", "Edinburgh"),
+        ("Postdoc in Holography", "Edinburgh"),
+    )
+
+    assert len(titles) == 1
+
+
+def test_a_phd_and_a_postdoc_in_the_same_group_are_both_kept():
+    titles = dedupe_titles(
+        ("PhD Position in Experimental Neutrino Physics", "KIT"),
+        ("Postdoc in Experimental Neutrino Physics", "KIT"),
+    )
+
+    assert len(titles) == 2
+
+
+def test_different_specialisms_at_one_employer_are_both_kept():
+    titles = dedupe_titles(
+        ("Postdoc in Experimental High Energy Physics", "CERN"),
+        ("Postdoc in Theoretical High Energy Physics", "CERN"),
+    )
+
+    assert len(titles) == 2
+
+
+def test_a_generic_title_does_not_swallow_a_specific_one_at_the_same_employer():
+    """Too few shared topic words to tell a generic advert from a different,
+    more specific job at the same university.
+    """
+    titles = dedupe_titles(
+        ("Postdoctoral Research Associate", "Durham U."),
+        ("Postdoctoral Research Associate in Neutrino Physics", "Durham U."),
+    )
+
+    assert len(titles) == 2
+
+
+def test_similar_titles_at_different_employers_are_both_kept():
+    titles = dedupe_titles(
+        ("PhD Position in Experimental Astroparticle Physics", "KIT"),
+        ("PhD Position in Experimental Astroparticle Physics and Neutrino Astronomy", "DESY"),
+    )
+
+    assert len(titles) == 2
+
+
+@pytest.mark.parametrize(
+    "second_url",
+    ["http://www.example.edu/jobs/42/", "https://example.edu/jobs/42#apply",
+     "https://example.edu/jobs/42?utm_source=newsletter"],
+)
+def test_the_same_page_reached_by_two_urls_is_shown_once_even_without_an_employer(second_url):
+    """Same destination is the same job however the model titled it, so
+    this applies even when the employer is unknown.
+    """
+    titles = dedupe_titles(
+        ("Postdoctoral Researcher", None),
+        ("Research Fellow, Cosmology", None),
+        urls=["https://example.edu/jobs/42", second_url],
+    )
+
+    assert titles == ["Postdoctoral Researcher"]
+
+
+def test_a_query_parameter_naming_the_job_keeps_two_postings_apart():
+    titles = dedupe_titles(
+        ("Postdoctoral Researcher", None),
+        ("Postdoctoral Researcher", None),
+        urls=["https://jobs.example.edu/view?id=1", "https://jobs.example.edu/view?id=2"],
+    )
+
+    assert len(titles) == 2
+
+
 def test_a_posting_found_on_inspire_keeps_inspire_provenance():
     """Badging an inspirehep.net link "not verified against Inspire" would
     contradict itself - it's an Inspire posting our jobs-API query missed.

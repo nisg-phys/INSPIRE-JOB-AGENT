@@ -1,0 +1,12 @@
+apiVersion: 1
+datasources:
+  - name: Google Cloud Monitoring
+    type: stackdriver
+    uid: gcm
+    access: proxy
+    isDefault: true
+    jsonData:
+      # "gce" means "use Application Default Credentials", which the
+      # compose file points at your gcloud ADC via GOOGLE_APPLICATION_CREDENTIALS.
+      authenticationType: gce
+      defaultProject: pulsar-jobs-agent

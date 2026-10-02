@@ -37,6 +37,11 @@ class _JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
             "level": record.levelname,
+            # The field Cloud Logging reads a structured entry's severity
+            # from. Without it every line is stored as DEFAULT, so filtering
+            # or colouring logs by level (Logs Explorer, Grafana) can't work.
+            # Python's level names are valid values as they are.
+            "severity": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
             "request_id": getattr(record, "request_id", "-"),
@@ -45,7 +50,7 @@ class _JsonFormatter(logging.Formatter):
             payload["exc_info"] = self.formatException(record.exc_info)
         # Fields passed via logger.info(msg, extra={...}) ride along too.
         for key, value in record.__dict__.items():
-            if key in _STANDARD_ATTRS or key == "request_id":
+            if key in _STANDARD_ATTRS or key in ("request_id", "severity"):
                 continue
             payload[key] = value
         return json.dumps(payload, default=str)

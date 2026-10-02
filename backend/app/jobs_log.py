@@ -21,7 +21,8 @@ def known_institutions(names: list[str]) -> dict[str, str | None]:
     literature query (`aff "<name>"`), so an arbitrary string must never
     reach it. Only names already logged from a real Inspire posting come
     back; anything else is silently dropped. The id may be None - not every
-    posting links an institution record.
+    posting links an institution record, and a free-text name only gets one
+    if an alias resolves it (see worker/aliases.py).
     """
     if not names:
         return {}
@@ -31,7 +32,9 @@ def known_institutions(names: list[str]) -> dict[str, str | None]:
             text(
                 """
                 SELECT n AS institution,
-                       max(payload->'institution_ids'->>n) AS institution_id
+                       coalesce(
+                           max(payload->'institution_ids'->>n), resolve_institution(n)
+                       ) AS institution_id
                 FROM jobs_raw, unnest(institutions) AS n
                 WHERE n = ANY(:names)
                 GROUP BY n

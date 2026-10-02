@@ -1,6 +1,11 @@
 import pytest
 
-from app.query_rewriter import ParsedQuery, mentions_career_stage, to_job_query_params
+from app.query_rewriter import (
+    ParsedQuery,
+    career_stages,
+    mentions_career_stage,
+    to_job_query_params,
+)
 
 
 def test_ranks_pass_through_as_structured_filter_not_keywords():
@@ -113,6 +118,31 @@ def test_bare_subfield_queries_may_not_be_answered_from_cache(query):
 )
 def test_queries_that_settle_the_stage_may_use_the_cache(query):
     assert mentions_career_stage(query) is True
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [("phd in string theory", "postdoc in string theory"),
+     ("assistant professor in cosmology", "professor in cosmology"),
+     ("postdoc in cosmology", "postdoc or phd in cosmology"),
+     ("masters in astrophysics", "phd in astrophysics")],
+)
+def test_different_career_stages_get_different_cache_keys(first, second):
+    """The pair from the README scores 0.77 by embedding, just under the
+    cache threshold - only this key keeps them apart for certain.
+    """
+    assert career_stages(first) != career_stages(second)
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [("postdoc in string theory", "post-docs in string thoery"),
+     ("postdoctoral positions in cosmology", "postdoc jobs in cosmology"),
+     ("PhD in lattice QCD", "doctoral studentship in lattice QCD"),
+     ("professor in cosmology", "faculty jobs in cosmology")],
+)
+def test_paraphrases_of_one_stage_share_a_cache_key(first, second):
+    assert career_stages(first) == career_stages(second)
 
 
 def test_defaults_sort_by_deadline_not_recency():

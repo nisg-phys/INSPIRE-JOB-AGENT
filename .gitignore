@@ -6,3 +6,7 @@ venv/
 *.egg-info/
 .DS_Store
 .firebase/
+
+# Service-account keys (e.g. the Grafana Cloud reader key)
+grafana-key.json
+*-key.json

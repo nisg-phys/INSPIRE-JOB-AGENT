@@ -1,0 +1,18 @@
+{
+  "name": "pulsar_events",
+  "description": "Notable backend events (failures, refusals, fallbacks, LLM provider outcomes), by event name and LLM provider.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"pulsar-backend\" AND jsonPayload.message=(\"query_rejected_off_topic\" OR \"ambiguity_check\" OR \"web_fallback\" OR \"web_fallback_failed\" OR \"web_fallback_unexpected_error\" OR \"inspire_search_failed\" OR \"query_rewrite_failed\" OR \"search_failed_unexpectedly\" OR \"request_failed\" OR \"deferred_enrichment_failed\" OR \"llm_provider_succeeded\" OR \"llm_provider_failed\" OR \"llm_provider_skipped\" OR \"llm_all_providers_failed\")",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": [
+      {"key": "event", "valueType": "STRING"},
+      {"key": "provider", "valueType": "STRING"}
+    ]
+  },
+  "labelExtractors": {
+    "event": "EXTRACT(jsonPayload.message)",
+    "provider": "EXTRACT(jsonPayload.provider)"
+  }
+}

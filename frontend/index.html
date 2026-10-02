@@ -407,6 +407,39 @@
         color: #a6a9bb;
       }
 
+      /* Papers arrive in a second request after the table is shown, so
+         each waiting cell says what it's waiting for. */
+      .papers-loading {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+      }
+
+      .papers-loading::before {
+        content: "";
+        flex: none;
+        width: 0.8rem;
+        height: 0.8rem;
+        border: 2px solid var(--accent-soft);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: papers-spin 0.8s linear infinite;
+      }
+
+      @keyframes papers-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .papers-loading::before {
+          animation: none;
+        }
+      }
+
       .empty-state {
         padding: 2.5rem 1.5rem;
         text-align: center;
@@ -587,7 +620,7 @@
           // is "still loading" until that request comes back.
           return job.papersResolved
             ? '<span class="muted">Not yet available</span>'
-            : '<span class="muted">Loading…</span>';
+            : '<span class="papers-loading">Loading relevant papers…</span>';
         }
         const items = papers
           .map((p) => {
@@ -700,6 +733,14 @@
           });
           const data = await response.json();
 
+          // Errors carry a human-readable detail (e.g. the 429 from the
+          // per-client rate limit says how long to wait) and no results.
+          if (!response.ok) {
+            statusEl.textContent =
+              typeof data.detail === "string" ? data.detail : `Error: ${response.status}`;
+            return;
+          }
+
           if (data.needs_clarification) {
             pendingQuery = query;
             clarificationQuestionEl.textContent = data.clarification_question;
@@ -759,7 +800,16 @@
               .filter((name) => name && name !== "Unknown institution")
           ),
         ];
-        if (pending.length === 0) return;
+        if (pending.length === 0) {
+          // Nothing to ask for - e.g. the only empty rows have no known
+          // institution - so those cells must stop saying they're loading.
+          const stillLoading = inspireJobs.some(
+            (job) => !job.recent_papers || job.recent_papers.length === 0
+          );
+          jobs.forEach((job) => (job.papersResolved = true));
+          if (stillLoading) resultsEl.innerHTML = renderTable(jobs, false);
+          return;
+        }
 
         let papers = {};
         try {
