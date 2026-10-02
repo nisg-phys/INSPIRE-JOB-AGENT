@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from app import cache
 from app.config import get_settings
 from app.formatter import FormattedJob, format_jobs
-from app.inspire_client import InspireAPIError, search_jobs
+from app.inspire_client import InspireAPIError, is_expired, search_jobs
 from app.institution_papers import (
     MAX_PARALLEL_FETCHES,
     Paper,
@@ -188,9 +188,18 @@ def _search(request: SearchRequest) -> SearchResponse:
         logger.info("cache_lookup", extra={"hit": False, "skipped": "no_career_stage"})
 
     if cached is not None:
-        return SearchResponse(
-            cached=True, results=cached.result, total_matches=cached.total_matches
-        )
+        # An entry can be up to a day old, so a job open when it was stored
+        # may have closed since. Those were counted in the stored total too.
+        results = [job for job in cached.result if not is_expired(job.deadline)]
+        if cached.result and not results:
+            # Everything it held has closed: "0 results" would be the cache's
+            # answer, not Inspire's, so search live instead.
+            logger.info("cache_entry_expired")
+        else:
+            total = cached.total_matches
+            if total is not None:
+                total -= len(cached.result) - len(results)
+            return SearchResponse(cached=True, results=results, total_matches=total)
 
     try:
         rewrite_start = time.monotonic()

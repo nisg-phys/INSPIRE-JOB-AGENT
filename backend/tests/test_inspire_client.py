@@ -222,3 +222,80 @@ def test_rank_fetches_actually_run_concurrently(monkeypatch):
     result = search_jobs(JobQueryParams(ranks=["JUNIOR", "SENIOR"]))
 
     assert len(result.jobs) == 2
+
+
+# --- Postings whose deadline has passed -------------------------------------
+
+from datetime import date, datetime, timezone  # noqa: E402
+
+import pytest  # noqa: E402
+
+import app.inspire_client as inspire_client  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("now", "cutoff"),
+    [
+        # 10:00 UTC on 2 Oct is still 1 Oct in UTC-12, so a 1 Oct deadline
+        # hasn't passed everywhere yet.
+        (datetime(2026, 10, 2, 10, 0, tzinfo=timezone.utc), date(2026, 10, 1)),
+        # From noon UTC it is 2 Oct everywhere, and 1 Oct has ended.
+        (datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc), date(2026, 10, 2)),
+    ],
+)
+def test_a_deadline_stays_open_until_its_date_has_ended_everywhere(now, cutoff):
+    assert inspire_client.deadline_cutoff(now) == cutoff
+
+
+@pytest.mark.parametrize(
+    ("deadline", "expired"),
+    [("2026-10-01", True), ("2026-10-02", False), ("2026-11-30", False),
+     (None, False), ("", False), ("not a date", False)],
+)
+def test_only_a_deadline_before_the_cutoff_counts_as_expired(deadline, expired):
+    assert inspire_client.is_expired(deadline, cutoff=date(2026, 10, 2)) is expired
+
+
+def sent_queries(monkeypatch, params):
+    """Run a search and return the `q` of every request it sent to Inspire."""
+    sent = []
+
+    def fake_request(endpoint, query_params):
+        sent.append(query_params["q"])
+        return {"hits": {"hits": [], "total": 0}}
+
+    monkeypatch.setattr(inspire_client, "_request", fake_request)
+    monkeypatch.setattr(inspire_client, "deadline_cutoff", lambda now=None: date(2026, 10, 2))
+    search_jobs(params)
+    return sent
+
+
+def test_open_searches_ask_inspire_to_drop_passed_deadlines(monkeypatch):
+    """Inspire keeps a posting "open" for a while after its deadline, and
+    sorted by soonest deadline those would top the results.
+    """
+    assert sent_queries(monkeypatch, JobQueryParams(keywords="string theory")) == [
+        "(string theory) and deadline_date:>=2026-10-02"
+    ]
+
+
+def test_a_search_with_no_keywords_is_still_filtered(monkeypatch):
+    assert sent_queries(monkeypatch, JobQueryParams(keywords="")) == ["deadline_date:>=2026-10-02"]
+
+
+def test_the_counting_requests_of_a_multi_rank_search_are_filtered_too(monkeypatch):
+    """Otherwise "Showing 25 of N" would count jobs that are never shown."""
+    queries = sent_queries(monkeypatch, JobQueryParams(keywords="cosmology", ranks=["JUNIOR", "SENIOR"]))
+
+    assert len(queries) == 4
+    assert all(q == "(cosmology) and deadline_date:>=2026-10-02" for q in queries)
+
+
+def test_keywords_cannot_close_the_group_and_escape_the_filter(monkeypatch):
+    queries = sent_queries(monkeypatch, JobQueryParams(keywords="x) or (y"))
+
+    assert queries == ["(x or y) and deadline_date:>=2026-10-02"]
+
+
+def test_a_closed_search_is_not_date_filtered(monkeypatch):
+    assert sent_queries(monkeypatch, JobQueryParams(keywords="x", status="closed")) == ["x"]

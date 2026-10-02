@@ -12,6 +12,7 @@ import contextvars
 import html
 import re
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal, Optional
 
 import requests
@@ -128,10 +129,62 @@ def _institution_ids(institutions: list[dict]) -> dict[str, str]:
     return ids
 
 
+# The latest timezone in use (Baker Island, "Anywhere on Earth"). A
+# deadline is treated as still open until its date has ended there, so a
+# posting due today somewhere behind UTC isn't hidden while applicants in
+# that timezone can still send it.
+_LATEST_UTC_OFFSET = timedelta(hours=-12)
+
+
+def deadline_cutoff(now: datetime | None = None) -> date:
+    """The earliest deadline that is still open somewhere on Earth."""
+    now = now or datetime.now(timezone.utc)
+    return (now + _LATEST_UTC_OFFSET).date()
+
+
+def is_expired(deadline: str | None, cutoff: date | None = None) -> bool:
+    """Whether a posting's deadline has passed everywhere.
+
+    No deadline, or one that doesn't parse, isn't treated as expired: we
+    can't tell, and hiding a job someone could still apply to is worse.
+    """
+    if not deadline:
+        return False
+    try:
+        return date.fromisoformat(deadline) < (cutoff or deadline_cutoff())
+    except ValueError:
+        return False
+
+
+def _query(params: JobQueryParams) -> str:
+    """The `q` for an Inspire jobs request.
+
+    Inspire's status=open isn't enough on its own: a posting stays "open"
+    for a while after its deadline (15 of 213 open jobs on 2 Oct 2026 had
+    closed the day before), and sorted by soonest deadline those land at
+    the very top of the results. Filtered by Inspire rather than in Python
+    so pages stay full and the "of N" totals don't count them.
+
+    This also drops postings with no deadline at all - Inspire's query
+    language has no working "or field missing" - but every open job had
+    one when this was written.
+    """
+    if params.status != "open":
+        return params.keywords
+    open_filter = f"deadline_date:>={deadline_cutoff().isoformat()}"
+    # Parentheses dropped from the keywords (which derive from user text)
+    # so they can't close the group early: "x) or (y" would otherwise make
+    # the filter apply to only half the query.
+    keywords = " ".join(params.keywords.replace("(", " ").replace(")", " ").split())
+    if not keywords:
+        return open_filter
+    return f"({keywords}) and {open_filter}"
+
+
 def _search_jobs_single(params: JobQueryParams, rank: Rank | None) -> tuple[list[RawJob], int]:
     """One Inspire request. Returns its jobs and how many matched in total."""
     query_params = {
-        "q": params.keywords,
+        "q": _query(params),
         "size": params.size,
         "sort": params.sort,
         "status": params.status,
@@ -181,7 +234,7 @@ def _matching_record_ids(params: JobQueryParams, rank: Rank) -> set[str]:
     data = _request(
         "jobs",
         {
-            "q": params.keywords,
+            "q": _query(params),
             "size": MAX_COUNT_RECORDS,
             "status": params.status,
             "rank": rank,
