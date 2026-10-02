@@ -18,6 +18,10 @@ docker-compose up
 
 Copy `.env.example` to `.env` and fill in required values before running any service.
 
+Database migrations are applied by hand, not by the deploy: run
+`cd backend && alembic upgrade head` against the production `DATABASE_URL`
+before merging a change that adds one to `main`.
+
 ## Future scope
 
 - **Job sources beyond Inspire-HEP (partly done).** Inspire-HEP's jobs API is
@@ -30,9 +34,11 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   per query, never ingested, so they aren't deduped against Inspire postings,
   aren't available for paper enrichment (their institution names aren't
   Inspire's canonical spellings), and can't be refreshed on a schedule. A
-  real crawler that ingests boards into `jobs_raw` would fix all three - note
-  it would need its own institution-name normalization first, since
-  `worker/worker/discovery.py` would otherwise chase those names forever.
+  real crawler that ingests boards into `jobs_raw` would fix all three. Its
+  first prerequisite, resolving institution names to Inspire records, now
+  exists (`institution_aliases`, below). Still open: search only queries
+  Inspire live and never reads `jobs_raw`, so ingested rows would also need
+  a search path of their own before any user saw them.
 - **Inspire queries that miss postings Inspire actually has.** Searching the
   web for "postdoc in celestial holography" surfaced
   `inspirehep.net/jobs/2844516` ("Simons Fellow in Celestial Holography") - a
@@ -104,15 +110,17 @@ Copy `.env.example` to `.env` and fill in required values before running any ser
   can rotate it. A shared store (e.g. Memorystore), and keying on an address
   a trusted proxy appends rather than the client-supplied first entry, would
   close both.
-- **Paper enrichment for free-text institutions (partly fixed).** Papers are
-  now fetched by Inspire's institution record id (`affid <id>`) whenever the
-  job posting links one (~95% of open postings), which fixes the original
-  problem of the same institution being spelled differently across postings
-  ("Kentucky U." vs "U. Kentucky") and matching nothing. What remains: the
-  ~5% of institution entries that are free text with no linked record still
-  fall back to an exact-phrase name search, so a non-canonical spelling (e.g.
-  a posting that writes "U. Kentucky") still gets no papers. Resolving those
-  by fuzzy-matching Inspire's institution search was rejected on purpose: it
-  ranks the wrong record first (`Kentucky State U.` for "U. Kentucky"), and
-  showing another university's papers is worse than showing none. A curated
-  alias table would be the safe way to close this gap.
+- **Paper enrichment for free-text institutions (curation left).** Papers
+  are fetched by Inspire's institution record id (`affid <id>`) whenever one
+  is known. A posting usually links one (~95%); a free-text name now gets one
+  from `institution_aliases` (see `worker/worker/aliases.py`), which the
+  daily worker fills from every name->id link a posting has made and from
+  each institution record's own spellings (legacy ICN, name variants).
+  Matching only ignores case, punctuation and spacing - "U. Kentucky" vs
+  "Kentucky U." is never guessed, since fuzzy matching ranks the wrong record
+  first (`Kentucky State U.` for "U. Kentucky") and showing another
+  university's papers is worse than showing none. A free-text name whose
+  name search finds nothing lands in `unresolved_institutions`; what's left
+  is working through that list by hand (`python -m worker.aliases
+  unresolved`, then `... add "<name>" <inspire id>`), after which the next
+  worker run re-fetches it by id.

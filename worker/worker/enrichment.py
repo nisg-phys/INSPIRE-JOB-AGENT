@@ -6,6 +6,7 @@ import sys
 
 from sqlalchemy import text
 
+from worker.aliases import record_enrichment_outcome
 from worker.db import get_engine
 from worker.discovery import InstitutionRef
 from worker.inspire_literature_client import InspireAPIError, recent_papers
@@ -29,6 +30,7 @@ def enrich_institution(ref: InstitutionRef) -> None:
             ),
             {"institution": ref.name, "institution_id": ref.institution_id, "papers": payload},
         )
+    record_enrichment_outcome(ref.name, ref.institution_id, len(papers))
 
 
 def enrich(institutions: list[InstitutionRef]) -> None:

@@ -29,9 +29,13 @@ def discover_institutions(stale_after: timedelta = DEFAULT_STALE_AFTER) -> list[
     """Institutions seen in jobs_raw that are missing or stale in institution_papers.
 
     Also re-selects rows that were fetched by exact-phrase name match
-    (institution_id IS NULL) once a posting has since supplied an id - those
-    are the rows most likely to be wrongly empty, since a name spelling that
+    (institution_id IS NULL) once an id has since become known - those are
+    the rows most likely to be wrongly empty, since a name spelling that
     differs from the papers' affiliation string matches nothing.
+
+    A name no posting linked to a record gets its id from
+    resolve_institution (see worker/aliases.py), so adding an alias is
+    enough to have that institution re-fetched by id on the next run.
     """
     with get_engine().connect() as conn:
         rows = conn.execute(
@@ -39,7 +43,9 @@ def discover_institutions(stale_after: timedelta = DEFAULT_STALE_AFTER) -> list[
                 """
                 WITH seen_institutions AS (
                     SELECT n AS institution,
-                           max(payload->'institution_ids'->>n) AS institution_id
+                           coalesce(
+                               max(payload->'institution_ids'->>n), resolve_institution(n)
+                           ) AS institution_id
                     FROM jobs_raw, unnest(institutions) AS n
                     WHERE n <> ''
                     GROUP BY n
